@@ -1,0 +1,538 @@
+generator client {
+  provider        = "prisma-client"
+  output          = "./generated/"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  extensions = [uuid_ossp(map: "uuid-ossp", schema: "extensions"), vector]
+}
+
+model Profile {
+  id                String            @id @db.Uuid
+  email             String            @unique
+  role              String            @default("user")
+  avatar            String?
+  username          String?
+  created_at        DateTime          @default(now()) @db.Timestamptz(6)
+  updated_at        DateTime          @updatedAt @db.Timestamptz(6)
+  addresses         Addresses?        @relation("UserAddress")
+  cartItems         CartItem[]
+  comments          Comment[]         @relation("UserComments")
+  commentLikes      CommentLike[]     @relation("UserCommentLikes")
+  conversationsP1   Conversation[]    @relation("ConversationP1")
+  conversationsP2   Conversation[]    @relation("ConversationP2")
+  following         Follow[]          @relation("Following")
+  likes             Like[]            @relation("ProfileLikes")
+  media             Media[]           @relation("MediaAuthor")
+  sentMessages      Message[]         @relation("MessageSender")
+  sentNotifications Notification[]    @relation("NotificationFromActor")
+  notifications     Notification[]    @relation("NotificationToProfile")
+  orders            Orders[]          @relation("BuyerOrders")
+  posts             Post[]            @relation("UserPosts")
+  postLikes         PostLike[]        @relation("UserProfileLikes")
+  sellerProfile     SellerProfile?    @relation("SellerProfile")
+  shares            Share[]           @relation("ProfileShares")
+  socialMedia       SocialMediaInfo[] @relation("ProfileSocialMedia")
+  stories           Story[]           @relation("UserStories")
+}
+
+model SellerProfile {
+  id                    String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  profileId             String                 @unique @db.Uuid
+  store_name            String?
+  store_description     String?
+  store_logo            String?
+  store_banner          String?
+  store_location        String?
+  store_phone           String?
+  store_website         String?
+  store_socials         Json?
+  followers_count       Int                    @default(0)
+  is_verified           Boolean                @default(false)
+  verification_status   VerificationStatus     @default(PENDING)
+  verification_reason   String?
+  created_at            DateTime               @default(now()) @db.Timestamptz(6)
+  updated_at            DateTime               @updatedAt @db.Timestamptz(6)
+  store_slug            String                 @unique
+  auto_answer_enabled   Boolean                @default(false)
+  followers             Follow[]               @relation("Followers")
+  media                 Media[]                @relation("MediaSeller")
+  products              Products[]             @relation("SellerProducts")
+  profile               Profile                @relation("SellerProfile", fields: [profileId], references: [id])
+  wallet                SellerWallet?
+  shippingZones         ShippingZone[]
+  verificationDocuments VerificationDocument[]
+
+  @@unique([followers_count, id])
+}
+
+model Conversation {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  participant1Id   String    @db.Uuid
+  participant2Id   String    @db.Uuid
+  lastMessageAt    DateTime  @default(now()) @db.Timestamptz(6)
+  currentProductId Int?
+  currentProduct   Products? @relation("ConversationProduct", fields: [currentProductId], references: [id])
+  participant1     Profile   @relation("ConversationP1", fields: [participant1Id], references: [id])
+  participant2     Profile   @relation("ConversationP2", fields: [participant2Id], references: [id])
+  messages         Message[]
+
+  @@unique([participant1Id, participant2Id])
+}
+
+model Message {
+  id             String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  conversationId String       @db.Uuid
+  senderId       String       @db.Uuid
+  content        String
+  read           Boolean      @default(false)
+  sentAt         DateTime     @default(now()) @db.Timestamptz(6)
+  isAiResponse   Boolean      @default(false)
+  productId      Int?
+  conversation   Conversation @relation(fields: [conversationId], references: [id])
+  product        Products?    @relation("ProductMessages", fields: [productId], references: [id])
+  sender         Profile      @relation("MessageSender", fields: [senderId], references: [id])
+}
+
+model Products {
+  id             Int                    @id @default(autoincrement())
+  title          String
+  slug           String                 @unique
+  description    String?
+  price          Float
+  discount       Float?
+  status         ProductStatus?         @default(DRAFT)
+  sellerId       String                 @db.Uuid
+  created_at     DateTime               @default(now()) @db.Timestamptz(6)
+  updated_at     DateTime               @updatedAt @db.Timestamptz(6)
+  shippingZoneId String?                @db.Uuid
+  soldCount      Int                    @default(0)
+  averageRating  Float?
+  totalReviews   Int                    @default(0)
+  isFeatured     Boolean                @default(false)
+  bannerImageUrl String?
+  SKU            String?                @unique
+  isAccessory    Boolean                @default(false)
+  store_slug     String
+  embedding      Unsupported("vector")?
+  isThrift       Boolean                @default(false)
+  comments       Comment[]
+  conversations  Conversation[]         @relation("ConversationProduct")
+  likes          Like[]
+  measurement    Measurement?
+  media          Media[]
+  messages       Message[]              @relation("ProductMessages")
+  notifications  Notification[]         @relation("NotificationToProduct")
+  category       ProductCategories[]    @relation("ProductCategory")
+  taggedInPosts  ProductPostTag[]
+  appearsIn      ProductRelation[]      @relation("AppearsIn")
+  styledWith     ProductRelation[]      @relation("StyledWith")
+  tags           ProductTags[]          @relation("ProductTag")
+  variants       ProductVariant[]
+  seller         SellerProfile          @relation("SellerProducts", fields: [sellerId], references: [id], onDelete: Cascade)
+  shippingZone   ShippingZone?          @relation(fields: [shippingZoneId], references: [id])
+  shares         Share[]                @relation("ProductShare")
+  socialMedia    SocialMediaInfo[]      @relation("ProductSocialMedia")
+  stories        Story[]
+
+  @@index([sellerId])
+}
+
+model ProductVariant {
+  id         Int         @id @default(autoincrement())
+  size       String
+  stock      Int
+  price      Float?
+  productId  Int
+  cartItems  CartItem[]
+  orderItems OrderItem[]
+  product    Products    @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, size])
+}
+
+model Orders {
+  id             Int            @id @default(autoincrement())
+  userId         String         @db.Uuid
+  stripeId       String         @unique
+  name           String
+  address        String
+  zipcode        String
+  county         String
+  country        String
+  totalAmount    Int
+  status         OrderStatus    @default(PENDING)
+  created_at     DateTime       @default(now()) @db.Timestamptz(6)
+  updated_at     DateTime       @updatedAt @db.Timestamptz(6)
+  paymentMethod  String
+  shipper        String?
+  trackingNumber String?
+  payoutAmount   Int?
+  notifications  Notification[] @relation("NotificationToOrder")
+  orderItem      OrderItem[]
+  user           Profile        @relation("BuyerOrders", fields: [userId], references: [id])
+}
+
+model OrderItem {
+  id         Int            @id @default(autoincrement())
+  orderId    Int
+  quantity   Int
+  created_at DateTime       @default(now()) @db.Timestamptz(6)
+  variantId  Int
+  order      Orders         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  variant    ProductVariant @relation(fields: [variantId], references: [id])
+}
+
+model CartItem {
+  id         String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  quantity   Int
+  created_at DateTime       @default(now())
+  userId     String         @db.Uuid
+  variantId  Int
+  user       Profile        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  variant    ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, variantId])
+}
+
+model Addresses {
+  id         Int      @id @default(autoincrement())
+  userId     String   @unique @db.Uuid
+  name       String
+  address    String
+  zipcode    String
+  country    String
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  updated_at DateTime @updatedAt @db.Timestamptz(6)
+  county     String
+  phone      String
+  state      String
+  user       Profile  @relation("UserAddress", fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model ShippingZone {
+  id         String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name       String
+  created_at DateTime      @default(now()) @db.Timestamptz(6)
+  updated_at DateTime      @updatedAt @db.Timestamptz(6)
+  sellerId   String        @db.Uuid
+  isDefault  Boolean       @default(false)
+  products   Products[]
+  seller     SellerProfile @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  rates      ZoneRate[]
+
+  @@unique([sellerId, name])
+}
+
+model ZoneRate {
+  id        String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  zoneId    String       @db.Uuid
+  cost      Float
+  countries String[]
+  states    String[]
+  zone      ShippingZone @relation(fields: [zoneId], references: [id], onDelete: Cascade)
+}
+
+model SellerWallet {
+  sellerId        String        @unique @db.Uuid
+  balance         Float         @default(0)
+  pending_balance Float         @default(0)
+  updated_at      DateTime      @updatedAt
+  id              String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  payouts         Payout[]
+  seller          SellerProfile @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  transactions    Transaction[]
+}
+
+model Transaction {
+  walletId    String       @db.Uuid
+  amount      Float
+  type        String
+  orderId     Int?
+  description String
+  created_at  DateTime     @default(now())
+  id          String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  wallet      SellerWallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
+}
+
+model Payout {
+  walletId        String       @db.Uuid
+  amount          Float
+  status          String
+  bank_account    Json
+  transaction_ref String?
+  requested_at    DateTime     @default(now())
+  completed_at    DateTime?
+  id              String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  wallet          SellerWallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
+}
+
+model Story {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  authorId   String    @db.Uuid
+  productId  Int?
+  expiresAt  DateTime
+  created_at DateTime  @default(now()) @db.Timestamptz(6)
+  mediaId    String    @unique @db.Uuid
+  author     Profile   @relation("UserStories", fields: [authorId], references: [id], onDelete: Cascade)
+  media      Media     @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+  product    Products? @relation(fields: [productId], references: [id])
+}
+
+model Post {
+  id             String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  authorId       String           @db.Uuid
+  caption        String?
+  mediaId        String           @unique @db.Uuid
+  created_at     DateTime         @default(now()) @db.Timestamptz(6)
+  comments       Comment[]
+  notifications  Notification[]
+  author         Profile          @relation("UserPosts", fields: [authorId], references: [id], onDelete: Cascade)
+  media          Media            @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+  likes          PostLike[]
+  taggedProducts ProductPostTag[]
+
+  @@index([authorId])
+}
+
+model Comment {
+  id            String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  text          String
+  authorId      String         @db.Uuid
+  productId     Int?
+  parentId      String?        @db.Uuid
+  created_at    DateTime       @default(now()) @db.Timestamptz(6)
+  postId        String?        @db.Uuid
+  author        Profile        @relation("UserComments", fields: [authorId], references: [id], onDelete: Cascade)
+  parent        Comment?       @relation("Replies", fields: [parentId], references: [id], onDelete: NoAction)
+  replies       Comment[]      @relation("Replies")
+  post          Post?          @relation(fields: [postId], references: [id], onDelete: Cascade)
+  product       Products?      @relation(fields: [productId], references: [id], onDelete: Cascade)
+  likes         CommentLike[]
+  notifications Notification[] @relation("NotificationToComment")
+}
+
+model Like {
+  id         Int      @id @default(autoincrement())
+  userId     String   @db.Uuid
+  productId  Int
+  created_at DateTime @default(now())
+  product    Products @relation(fields: [productId], references: [id], onDelete: Cascade)
+  profile    Profile  @relation("ProfileLikes", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, productId])
+  @@index([productId])
+}
+
+model CommentLike {
+  userId    String  @db.Uuid
+  commentId String  @db.Uuid
+  comment   Comment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  user      Profile @relation("UserCommentLikes", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, commentId])
+}
+
+model PostLike {
+  userId String  @db.Uuid
+  postId String  @db.Uuid
+  post   Post    @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user   Profile @relation("UserProfileLikes", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, postId])
+  @@index([postId])
+}
+
+model Follow {
+  followerId  String        @db.Uuid
+  followingId String        @db.Uuid
+  created_at  DateTime      @default(now())
+  follower    Profile       @relation("Following", fields: [followerId], references: [id], onDelete: Cascade)
+  following   SellerProfile @relation("Followers", fields: [followingId], references: [id], onDelete: Cascade)
+
+  @@id([followerId, followingId])
+}
+
+model Share {
+  id         Int      @id @default(autoincrement())
+  userId     String   @db.Uuid
+  productId  Int
+  platform   String?
+  shareUrl   String?
+  created_at DateTime @default(now())
+  product    Products @relation("ProductShare", fields: [productId], references: [id], onDelete: Cascade)
+  profile    Profile  @relation("ProfileShares", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, productId, platform])
+}
+
+model Media {
+  url        String
+  type       MediaType
+  productId  Int?
+  created_at DateTime       @default(now()) @db.Timestamptz(6)
+  sellerId   String?        @db.Uuid
+  altText    String?
+  metadata   Json?
+  public_id  String?        @unique
+  id         String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  authorId   String         @db.Uuid
+  author     Profile        @relation("MediaAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  product    Products?      @relation(fields: [productId], references: [id])
+  seller     SellerProfile? @relation("MediaSeller", fields: [sellerId], references: [id])
+  post       Post?
+  story      Story?
+}
+
+model Category {
+  id              Int                 @id @default(autoincrement())
+  name            String              @unique
+  thumbnailCatUrl String?
+  created_at      DateTime            @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime            @updatedAt @db.Timestamptz(6)
+  slug            String              @unique
+  products        ProductCategories[] @relation("ProductCategory")
+}
+
+model Tag {
+  id         Int           @id @default(autoincrement())
+  name       String        @unique
+  created_at DateTime      @default(now()) @db.Timestamptz(6)
+  updated_at DateTime      @updatedAt @db.Timestamptz(6)
+  products   ProductTags[] @relation("ProductTag")
+}
+
+model Measurement {
+  id        Int       @id @default(autoincrement())
+  productId Int?      @unique
+  weight    Float?
+  length    Float?
+  width     Float?
+  height    Float?
+  product   Products? @relation(fields: [productId], references: [id], onDelete: Cascade)
+}
+
+model VerificationDocument {
+  id              String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  sellerProfileId String             @db.Uuid
+  type            String
+  url             String
+  status          VerificationStatus @default(PENDING)
+  created_at      DateTime           @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime           @updatedAt @db.Timestamptz(6)
+  sellerProfile   SellerProfile      @relation(fields: [sellerProfileId], references: [id], onDelete: Cascade)
+}
+
+model Notification {
+  id         Int              @id @default(autoincrement())
+  userId     String           @db.Uuid
+  message    String
+  type       NotificationType
+  read       Boolean          @default(false)
+  orderId    Int?
+  productId  Int?
+  created_at DateTime         @default(now()) @db.Timestamptz(6)
+  updated_at DateTime         @updatedAt @db.Timestamptz(6)
+  actorId    String?          @db.Uuid
+  commentId  String?          @db.Uuid
+  postId     String?          @db.Uuid
+  actor      Profile?         @relation("NotificationFromActor", fields: [actorId], references: [id])
+  comment    Comment?         @relation("NotificationToComment", fields: [commentId], references: [id])
+  order      Orders?          @relation("NotificationToOrder", fields: [orderId], references: [id])
+  post       Post?            @relation(fields: [postId], references: [id], onDelete: Cascade)
+  product    Products?        @relation("NotificationToProduct", fields: [productId], references: [id])
+  profile    Profile          @relation("NotificationToProfile", fields: [userId], references: [id])
+
+  @@index([userId])
+}
+
+model SocialMediaInfo {
+  id         Int       @id @default(autoincrement())
+  userId     String?   @db.Uuid
+  productId  Int?
+  platform   String
+  handle     String
+  created_at DateTime  @default(now())
+  product    Products? @relation("ProductSocialMedia", fields: [productId], references: [id], onDelete: Cascade)
+  profile    Profile?  @relation("ProfileSocialMedia", fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model ProductCategories {
+  productId  Int
+  categoryId Int
+  category   Category @relation("ProductCategory", fields: [categoryId], references: [id], onDelete: Cascade)
+  product    Products @relation("ProductCategory", fields: [productId], references: [id], onDelete: Cascade)
+
+  @@id([productId, categoryId])
+}
+
+model ProductTags {
+  productId Int
+  tagId     Int
+  product   Products @relation("ProductTag", fields: [productId], references: [id], onDelete: Cascade)
+  tag       Tag      @relation("ProductTag", fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([productId, tagId])
+}
+
+model ProductRelation {
+  styledWithId Int
+  appearsInId  Int
+  appearsIn    Products @relation("AppearsIn", fields: [appearsInId], references: [id], onDelete: Cascade)
+  styledWith   Products @relation("StyledWith", fields: [styledWithId], references: [id], onDelete: Cascade)
+
+  @@id([styledWithId, appearsInId])
+}
+
+model ProductPostTag {
+  productId Int
+  postId    String   @db.Uuid
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  product   Products @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@id([postId, productId])
+}
+
+enum ProductStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum MediaType {
+  IMAGE
+  VIDEO
+  AUDIO
+}
+
+enum OrderStatus {
+  PENDING
+  COMPLETED
+  CANCELED
+  PAID
+  SHIPPED
+  DELIVERED
+  RETURNED
+}
+
+enum VerificationStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+enum NotificationType {
+  ORDER
+  REVIEW
+  PRODUCT
+  GENERAL
+  NEW_COMMENT
+  COMMENT_LIKE
+  REPLY
+  PRODUCT_SHARE
+  NEW_FOLLOWER
+  NEW_POST
+  POST_LIKE
+}
