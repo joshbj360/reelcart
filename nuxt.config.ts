@@ -17,7 +17,8 @@ export default defineNuxtConfig({
     'nuxt3-notifications',
     '@nuxt/test-utils/module',
     '@nuxtjs/tailwindcss',
-    '@nuxtjs/color-mode'
+    '@nuxtjs/color-mode',
+    'pinia-plugin-persistedstate/nuxt',
   ],
   colorMode: {
     preference: 'system', // default preference: 'system' | 'light' | 'dark'
