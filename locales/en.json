@@ -1,0 +1,14 @@
+{
+  "zod": {
+    "errors": {
+      "invalid_type": "Expected {expected}, received {received}",
+      "invalid_string": {
+        "email": "Please enter a valid business email",
+        "url": "Invalid URL format"
+      }
+    }
+  },
+  "auth": {
+    "password_min": "Password must be at least {min} characters"
+  }
+}

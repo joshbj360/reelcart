@@ -1,4 +1,4 @@
-import { authRepository } from "~~/layers/auth/database/repositories/auth.repository"
+import { authRepository } from "../../../database/repositories/auth.repository"
 
 export default defineEventHandler(async (event) => {
   const slug = getRouterParam(event, 'slug')
@@ -10,7 +10,7 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  const seller = await authRepository.findSellerBySlug(slug)
+  const seller = await authRepository.getSellerBySlug(slug)
 
   if (!seller) {
     throw createError({

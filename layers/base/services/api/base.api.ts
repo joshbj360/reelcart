@@ -1,5 +1,5 @@
 import  {type H3Event, getHeader } from 'h3'
-import { useRequestEvent, useRuntimeConfig } from '#imports'
+import { useRequestEvent, useRuntimeConfig } from 'nuxt/app'
 
 export interface ApiServiceOptions {
   method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
@@ -14,7 +14,7 @@ export class BaseApiClient {
   constructor() {
     // ✅ This is fine - runs INSIDE component/composable context
     const config = useRuntimeConfig()
-    this.baseURL = config.public.baseURL || ''
+    this.baseURL = config.public.baseURL as string || ''
   }
 
   protected async request<T>(
@@ -41,6 +41,21 @@ export class BaseApiClient {
         if (cookie) {
           headers['cookie'] = cookie
         }
+      }
+    }
+
+    // Auth forwarding for CLIENT-SIDE with Supabase token
+    if (import.meta.client) {
+      try {
+        const supabase = useSupabaseClient()
+        const { data: { session } } = await supabase.auth.getSession()
+        
+        if (session?.access_token) {
+          headers['Authorization'] = `Bearer ${session.access_token}`
+        }
+      } catch (error) {
+        console.debug('Could not retrieve Supabase session:', error)
+        // Continue without auth token - not all endpoints require it
       }
     }
 

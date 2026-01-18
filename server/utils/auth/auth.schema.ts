@@ -7,6 +7,8 @@ export const loginSchema = z.object({
 });
 
 export const registerSchema = loginSchema.extend({
+  email: z.string().email('Invalid email format'),
+  password: z.string().min(6, 'Password must be at least 6 characters'),
   username: z.string().min(3, 'Username must be at least 3 characters').optional(),
   phone: z.string().optional(),
 });

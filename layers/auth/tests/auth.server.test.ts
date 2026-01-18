@@ -58,9 +58,9 @@ describe('Auth Server API Handlers', () => {
 
     // Reset modules to ensure globals are picked up?
     // Actually, just importing them dynamically inside test/beforeEach ensures globals are set.
-    loginHandler = (await import('../server/api/auth/login.post')).default
-    registerHandler = (await import('../server/api/auth/register.post')).default
-    meHandler = (await import('../server/api/auth/me.get')).default
+    loginHandler = (await import('../server/api/login.post.ts')).default
+    registerHandler = (await import('../server/api/register.post.ts')).default
+    meHandler = (await import('../server/api/me.get.ts')).default
     const utils = await import('../server/utils/auth.utils')
     requireAuth = utils.requireAuth
   })

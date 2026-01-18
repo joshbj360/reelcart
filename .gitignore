@@ -17,8 +17,13 @@ logs
 .DS_Store
 .fleet
 .idea
+.json
+package-lock.json
+package.json
 
 # Local env files
 .env
 .env.*
 !.env.example
+prisma/generated
+app/types

@@ -241,9 +241,9 @@
 </template>
 
 <script setup lang="ts">
-import { useAuth } from '../../composables/useAuth'
+import { useAuth } from '../composables/useAuth'
 import { reactive, ref, watch } from 'vue'
-import { registerSchema, loginSchema } from '../../utils/auth.schema'
+import { registerSchema, loginSchema } from '../../../server/utils/auth/auth.schema'
 
 
 // definePageMeta({ 

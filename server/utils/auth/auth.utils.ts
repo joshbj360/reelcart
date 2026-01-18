@@ -1,6 +1,6 @@
 import { serverSupabaseUser } from '#supabase/server';
 import { authRepository } from '../../database/repositories/auth.repository';
-import { safeUserSchema, type ISafeUser } from '../../utils/auth.schema';
+import { safeUserSchema, type ISafeUser } from '../../utils/auth/auth.schema';
 import type { H3Event } from 'h3';
 
 /**
@@ -29,10 +29,15 @@ export function transformToSafeUser(profile: any): ISafeUser {
  */
 export async function getAuthUser(event: H3Event): Promise<ISafeUser | null> {
   const user = await serverSupabaseUser(event);
-  if (!user) return null;
+  if (!user || !user.id) {
+    throw createError({
+      statusCode: 401,
+      statusMessage: 'Unauthorized: No active session',
+    })
+  }
 
   try {
-    const profile = await authRepository.findProfileById(user.id);
+    const profile = await authRepository.findByProfileId(user.id);
     if (!profile) return null;
 
     return transformToSafeUser(profile);

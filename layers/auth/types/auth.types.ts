@@ -1,5 +1,5 @@
 import type { Profile, SellerProfile } from '../../../prisma/generated/client';
-import type { ISafeUser, ISafeSellerProfile, ILoginCredentials, IRegisterData } from '../utils/auth.schema';
+import type { ISafeUser, ISafeSellerProfile, ILoginCredentials, IRegisterData } from '../../../server/utils/auth/auth.schema';
 
 // Database-level types (Internal)
 export interface IProfile extends Profile {

@@ -1,43 +1,40 @@
 import { defineStore } from 'pinia'
 import { useAuthApi } from '../services/auth.api'
-import type { IProfile, ISellerProfile, ILoginCredentials, IRegisterData } from '../types/auth.types'
-import { useSupabaseUser, useSupabaseClient } from '#imports'
+import type { ISafeUser, ISafeSellerProfile, ILoginCredentials, IRegisterData } from '../types/auth.types'
+import { safeUserSchema } from '../../../server/utils/auth/auth.schema'
 import { notify } from '@kyvg/vue3-notification'
-import { navigateTo } from 'nuxt/app'
+import {  navigateTo } from 'nuxt/app'
 import { ref, computed } from 'vue'
 
 export const useAuthStore = defineStore('auth', () => {
-  // ========== API ==========
-  const authApi = useAuthApi()
-
   // ========== STATE ==========
-  const userProfile = ref<IProfile | null>(null)
-  const sellerCache = ref<Record<string, ISellerProfile>>({})
+  const userProfile = ref<ISafeUser | null>(null)
+  const sellerCache = ref<Record<string, ISafeSellerProfile>>({})
   const isLoading = ref(false)
   const error = ref<string | null>(null)
 
   // ========== GETTERS ==========
-  const supabaseUser = useSupabaseUser()
-  
-  const isAuthenticated = computed(() => {
-    // we check if we have a profile , or if supabase session exist
+  const isLoggedIn = computed(() => {
     if (userProfile.value) return true
-
     const supabaseUser = useSupabaseUser()
     return !!supabaseUser.value
   })
-  const user = computed(() => {
-    if (!supabaseUser.value) return null
 
+  const isAuthenticated = computed(() => isLoggedIn.value) // Alias for consistency
+
+  const user = computed(() => {
+    if (!userProfile.value) return null
+
+    // Return only safe fields validated by Zod
     return {
-      id: userProfile.value?.id,
-      email: userProfile.value?.email,
-      username: userProfile.value?.username,
-      avatar: userProfile.value?.avatar,
-      role: userProfile.value?.role
+      id: userProfile.value.id,
+      email: userProfile.value.email,
+      username: userProfile.value.username,
+      avatar: userProfile.value.avatar,
+      role: userProfile.value.role,
     }
-    }
-  )
+  })
+
   const isSeller = computed(() => userProfile.value?.role === 'seller')
   const isVerifiedSeller = computed(() => 
     userProfile.value?.sellerProfile?.is_verified || false
@@ -46,19 +43,18 @@ export const useAuthStore = defineStore('auth', () => {
 
   // ========== ACTIONS ==========
 
-  /**
-   * Login with email/password
-   */
   async function login(credentials: ILoginCredentials) {
+    const authApi = useAuthApi()
     isLoading.value = true
     error.value = null
 
     try {
+      // API client validates with Zod
       const response = await authApi.login(credentials)
-      
-      // ✅ Just set the user - plugin will handle cart merge
+      console.log('Login response:', response)
+      // Store validated user
       userProfile.value = response.user
-      
+
       notify({ type: 'success', text: 'Login successful!' })
       return { success: true }
     } catch (e: any) {
@@ -70,15 +66,15 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  /**
-   * Register new user
-   */
   async function register(data: IRegisterData) {
+    const authApi = useAuthApi()
     isLoading.value = true
     error.value = null
 
     try {
+      // API client validates with Zod
       const response = await authApi.register(data)
+
       notify({
         type: 'success',
         text: 'Registration successful! Please check your email to verify.',
@@ -93,12 +89,10 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  /**
-   * OAuth login
-   */
   async function loginWithOAuth(provider: 'google' | 'facebook') {
     const supabase = useSupabaseClient()
     isLoading.value = true
+    error.value = null
 
     try {
       const { error: oauthError } = await supabase.auth.signInWithOAuth({
@@ -120,39 +114,60 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  /**
-   * Fetch current user profile
-   */
-  async function fetchUserProfile() {
-    if (!isAuthenticated.value) return
+// In your auth.store.ts - replace the fetchUserProfile method with this:
 
-    isLoading.value = true
-    error.value = null
-
-    try {
-      const response = await authApi.getProfile()
-      
-      // ✅ Just set the user - plugin handles side effects
-      userProfile.value = response.user
-    } catch (e: any) {
-      error.value = e.message
-      console.error('Failed to fetch user profile:', e)
-    } finally {
-      isLoading.value = false
-    }
+async function fetchUserProfile() {
+  const supabaseUser = useSupabaseUser()
+  
+  // Don't attempt if no Supabase user
+  if (!supabaseUser.value) {
+    userProfile.value = null
+    return
   }
 
-  /**
-   * Create seller profile
-   */
-  async function createSellerProfile(data: Partial<ISellerProfile>) {
+  const authApi = useAuthApi()
+  isLoading.value = true
+  error.value = null
+
+  try {
+    const response = await authApi.getProfile()
+
+    // Validate response with Zod
+    const validated = safeUserSchema.parse(response.user)
+    userProfile.value = validated
+    
+    // Clear any previous errors
+    error.value = null
+  } catch (e: any) {
+    // ❌ If 401, the session is invalid - clear it
+    if (e.statusCode === 401 || e.response?.status === 401) {
+      console.warn('Session is invalid (401), clearing auth state')
+      userProfile.value = null
+      error.value = null
+      return
+    }
+
+    // ⚠️  Other errors - log but don't fail the app
+    error.value = e.message
+    console.error('Failed to fetch user profile:', {
+      message: e.message,
+      status: e.statusCode || e.response?.status,
+      endpoint: '/api/auth/profile'
+    })
+  } finally {
+    isLoading.value = false
+  }
+}
+
+  async function createSellerProfile(data: Partial<ISafeSellerProfile>) {
+    const authApi = useAuthApi()
     isLoading.value = true
     error.value = null
 
     try {
       const response = await authApi.createSellerProfile(data)
       userProfile.value = response.user
-      
+
       notify({ type: 'success', text: 'Seller profile created successfully!' })
       return true
     } catch (e: any) {
@@ -165,17 +180,14 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  /**
-   * Get seller profile by slug (with caching)
-   */
   async function getSellerBySlug(slug: string) {
     if (!slug) return null
-    
-    // Return from cache if exists
+
     if (sellerCache.value[slug]) {
       return sellerCache.value[slug]
     }
 
+    const authApi = useAuthApi()
     try {
       const response = await authApi.getSellerBySlug(slug)
       sellerCache.value[slug] = response.seller
@@ -186,23 +198,18 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  /**
-   * Logout
-   */
   async function logout() {
+    const authApi = useAuthApi()
     isLoading.value = true
 
     try {
       await authApi.logout()
-      
-      // ✅ Just clear the user - plugin handles cart clearing
+
       userProfile.value = null
       sellerCache.value = {}
       error.value = null
-      
+
       notify({ type: 'success', text: 'Logged out successfully' })
-      
-      // Navigate to home
       navigateTo('/')
     } catch (e: any) {
       error.value = e.message
@@ -212,16 +219,10 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  /**
-   * Clear error
-   */
   function clearError() {
     error.value = null
   }
 
-  /**
-   * Reset store
-   */
   function reset() {
     userProfile.value = null
     sellerCache.value = {}
@@ -229,21 +230,18 @@ export const useAuthStore = defineStore('auth', () => {
     error.value = null
   }
 
+  
   return {
-    // State
     userProfile,
     sellerCache,
     isLoading,
     error,
-    
-    // Getters
+    isLoggedIn,
     isAuthenticated,
     user,
     isSeller,
     isVerifiedSeller,
     sellerProfile,
-    
-    // Actions
     login,
     register,
     loginWithOAuth,
@@ -255,5 +253,7 @@ export const useAuthStore = defineStore('auth', () => {
     reset,
   }
 }, {
-  persist: true,
+  persist: {
+    paths: ['userProfile', 'sellerCache'],
+  },
 })

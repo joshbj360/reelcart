@@ -1,38 +1,63 @@
+
 import { BaseApiClient } from '../../base/services/api/base.api'
-import type { ILoginCredentials, IProfile, ISellerProfile, IRegisterData } from '../types/auth.types'
+import type { ISafeUser, ILoginCredentials, IRegisterData, ISafeSellerProfile } from '../types/auth.types'
+import { loginSchema, registerSchema, safeUserSchema } from '../../../server/utils/auth/auth.schema'
+
 export class AuthApiClient extends BaseApiClient {
   /**
-   * Login with email/password
+   * Login with validation
    */
   async login(credentials: ILoginCredentials) {
-    return this.request<{ user: IProfile; session: any }>('/api/auth/login', {
-      method: 'POST',
-      body: credentials,
-    })
+    // Validate credentials before sending
+    const validated = loginSchema.parse(credentials)
+
+    const response = await this.request<{ user: ISafeUser; session: any }>(
+      '/api/auth/login',
+      {
+        method: 'POST',
+        body: validated,
+      }
+    )
+
+    // Validate response
+    safeUserSchema.parse(response.user)
+
+    return response
   }
 
   /**
-   * Register new user
+   * Register with validation
    */
   async register(data: IRegisterData) {
-    return this.request<{ success: boolean; user: any }>('/api/auth/register', {
-      method: 'POST',
-      body: data,
-    })
+    // Validate registration data
+    const validated = registerSchema.parse(data)
+
+    return this.request<{ success: boolean; user: any }>(
+      '/api/auth/register',
+      {
+        method: 'POST',
+        body: validated,
+      }
+    )
   }
 
   /**
-   * Get current user profile
+   * Get profile
    */
   async getProfile() {
-    return this.request<{ user: IProfile }>('/api/auth/profile')
+    const response = await this.request<{ user: ISafeUser }>('/api/auth/profile')
+
+    // Validate response
+    safeUserSchema.parse(response.user)
+
+    return response
   }
 
   /**
    * Create seller profile
    */
-  async createSellerProfile(data: Partial<ISellerProfile>) {
-    return this.request<{ user: IProfile }>('/api/auth/seller/profile', {
+  async createSellerProfile(data: Partial<ISafeSellerProfile>) {
+    return this.request<{ user: ISafeUser }>('/api/auth/seller/profile', {
       method: 'POST',
       body: data,
     })
@@ -42,11 +67,11 @@ export class AuthApiClient extends BaseApiClient {
    * Get seller by slug
    */
   async getSellerBySlug(slug: string) {
-    return this.request<{ seller: ISellerProfile }>(`/api/auth/seller/${slug}`)
+    return this.request<{ seller: ISafeSellerProfile }>(`/api/auth/seller/${slug}`)
   }
 
   /**
-   * Logout (client-side only - Supabase)
+   * Logout
    */
   async logout() {
     const supabase = useSupabaseClient()

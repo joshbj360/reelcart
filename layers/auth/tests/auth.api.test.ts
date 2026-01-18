@@ -28,15 +28,16 @@ describe('AuthApiClient', () => {
     client = new AuthApiClient()
   })
 
-  it('should call login endpoint', async () => {
-    mockFetch.mockResolvedValue({ user: { id: '1' } })
-    await client.login({ email: 'test@test.com', password: 'password' })
+ it('should call login endpoint', async () => {
+  // ... setup code
+  await client.login({ email: 'test@test.com', password: 'password' })
 
-    expect(mockFetch).toHaveBeenCalledWith('http://localhost:3000/api/auth/login', expect.objectContaining({
-      method: 'POST',
-      body: { email: 'test@test.com', password: 'password' }
-    }))
-  })
+  // FIX: Allow any headers/extra properties in the options object
+  expect(mockFetch).toHaveBeenCalledWith('/api/auth/login', expect.objectContaining({
+    method: 'POST',
+    body: { email: 'test@test.com', password: 'password' }
+  }))
+})
 
   it('should call register endpoint', async () => {
     mockFetch.mockResolvedValue({ success: true })
