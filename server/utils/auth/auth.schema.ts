@@ -1,17 +1,17 @@
 import { z } from 'zod';
+import { enhancedPasswordSchema } from './passwordValidator'
 
 // --- INPUT SCHEMAS (Client -> Server) ---
+export const registerSchema = z.object({
+  email: z.string().email('Invalid email format'),
+  password: enhancedPasswordSchema,
+  username: z.string().min(3).max(50).optional(),
+})
+
 export const loginSchema = z.object({
   email: z.string().email('Invalid email format'),
-  password: z.string().min(6, 'Password must be at least 6 characters'),
-});
-
-export const registerSchema = loginSchema.extend({
-  email: z.string().email('Invalid email format'),
-  password: z.string().min(6, 'Password must be at least 6 characters'),
-  username: z.string().min(3, 'Username must be at least 3 characters').optional(),
-  phone: z.string().optional(),
-});
+  password: z.string().min(1, 'Password required'),
+})
 
 // --- OUTPUT SCHEMAS (Server -> Client) ---
 // This defines exactly what fields the browser is allowed to see
