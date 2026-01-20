@@ -20,6 +20,16 @@ export default defineNuxtConfig({
     '@nuxtjs/color-mode',
     'pinia-plugin-persistedstate/nuxt',
   ],
+  nitro: {
+     middleware: [
+       'middleware/security',
+       'middleware/csrf',           // ADD
+       'middleware/rateLimiter',    // ADD
+     ],
+     plugins: [
+       'plugins/monitoring',        // ADD
+     ],
+   },
   colorMode: {
     preference: 'system', // default preference: 'system' | 'light' | 'dark'
     fallback: 'light',    // fallback if no preference detected/stored
