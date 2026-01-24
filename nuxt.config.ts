@@ -20,12 +20,16 @@ export default defineNuxtConfig({
     '@nuxtjs/color-mode',
     'pinia-plugin-persistedstate/nuxt',
   ],
+  imports: {
+    dirs: ['server/models', 'composables', 'utils', 'layers/auth'] // Add your layer-specific directories
+  },
   nitro: {
      middleware: [
-       'middleware/security',
-       'middleware/csrf',           // ADD
-       'middleware/rateLimiter',    // ADD
-     ],
+      'middleware/csrf-init.ts',  // ← Generate token FIRST
+      'middleware/security.ts',
+      'middleware/csrf.ts',       // ← Validate CSRF
+      'middleware/rateLimiter.ts',
+    ],
      plugins: [
        'plugins/monitoring',        // ADD
      ],
@@ -55,6 +59,7 @@ export default defineNuxtConfig({
     paystackSecretKey: process.env.PAYSTACK_SECRET_KEY, // TODO move to private
     platformCommissionRate: process.env.PLATFORM_COMMISSION_RATE,
     supabaseServiceKey: process.env.SUPABASE_SERVICE_KEY,
+    resendApiKey: process.env.RESEND_API_KEY,
     public: {
       siteName: process.env.NUXT_PUBLIC_SITE_NAME,
       baseURL: process.env.NUXT_PUBLIC_BASE_URL || 'http://localhost:3000',
@@ -62,7 +67,8 @@ export default defineNuxtConfig({
       CloudinaryApiKey: process.env.CLOUDINARY_API_KEY,
       cloudName: process.env.CLOUDINARY_CLOUD_NAME,
       cloudinaryUploadPreset: process.env.CLOUDINARY_UPLOAD_PRESET,
-      supabaseUrl: process.env.SUPABASE_URL
+      supabaseUrl: process.env.SUPABASE_URL,
+      senderEmail: process.env.SENDER_EMAIL,
     },
     private: {
       

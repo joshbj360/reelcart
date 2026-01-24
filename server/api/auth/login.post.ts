@@ -18,6 +18,9 @@ import { validateCsrfToken, csrfProtectionMiddleware } from '../../utils/securit
 import { logAuditEvent, AuditEventType } from '../../utils/auth/auditLog'
 import { throwAuthError, AuthErrorCode, getClientIp, getUserAgent } from '../../utils/security/errors'
 import type { H3Event } from 'h3'
+import { userRepository } from '~~/server/database/repositories/user.repository'
+import { sessionService } from '~~/server/services/session.service'
+import { parseUserAgent } from '../../utils/security/parseUserAgent'
 
 /**
  * Middleware to protect this endpoint
@@ -86,7 +89,7 @@ export default defineEventHandler(async (event: H3Event) => {
 
     // 5. Verify user has confirmed email (if enforced)
     if (process.env.REQUIRE_EMAIL_VERIFICATION === 'true') {
-      if (!data.user?.email_confirmed_at) {
+      if (!data.user?.confirmed_at) {
         await throwAuthError(AuthErrorCode.EMAIL_NOT_VERIFIED, {
           statusCode: 403,
           email,
@@ -98,12 +101,20 @@ export default defineEventHandler(async (event: H3Event) => {
     }
 
     // 6. Fetch/create user profile from database
-    const profile = await authRepository.findOrCreateProfile({
+    const profile = await userRepository.findOrCreateProfile({
       id: data.user!.id,
       email: data.user!.email!,
       username: data.user!.user_metadata?.username || email.split('@')[0],
       avatar: data.user!.user_metadata?.avatar_url || null,
     })
+
+     // Create session
+  const sessionInfo = await sessionService.createSession({
+    userId: data.user!.id,
+    ip: getClientIp(event),
+    userAgent: getHeader(event, 'user-agent') || '',
+    device: parseUserAgent(userAgent)
+  })
 
     // 7. Validate response with Zod
     const safeUser = safeUserSchema.parse(profile)

@@ -5,4 +5,8 @@ export default defineNuxtConfig({
       pathPrefix: false,
     },
   ],
+  modules: [
+    '@nuxtjs/supabase',
+    '@pinia/nuxt',
+  ],
 })

@@ -34,14 +34,14 @@ setInterval(() => {
 
 export const rateLimitConfig = {
   login: {
-    maxAttempts: 5,
+    maxAttempts: 10,
     windowMs: 15 * 60 * 1000, // 15 minutes
     lockoutMs: 30 * 60 * 1000, // 30 minutes lockout
     keyPrefix: 'auth:login',
   } as RateLimitConfig,
 
   register: {
-    maxAttempts: 3,
+    maxAttempts: 5,
     windowMs: 60 * 60 * 1000, // 1 hour
     lockoutMs: 60 * 60 * 1000, // 1 hour lockout
     keyPrefix: 'auth:register',

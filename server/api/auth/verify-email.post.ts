@@ -1,62 +1,66 @@
+// server/api/auth/verify-email.post.ts (PROPER - Using Repository)
+/**
+ * Verify Email Endpoint
+ * Uses auth.repository for token validation (single source of truth)
+ */
+import { serverSupabaseClient } from '#supabase/server'
+import { defineEventHandler, readBody, createError } from 'h3'
 import { authRepository } from '../../database/repositories/auth.repository'
 import { logAuditEvent, AuditEventType } from '../../utils/auth/auditLog'
-import { prisma } from '../../utils/db'
-import { serverSupabaseClient } from '#supabase/server'
-
-import crypto from 'crypto'
 
 export default defineEventHandler(async (event) => {
   const { token } = await readBody(event)
-
-  if (!token) {
-    throw createError({ statusCode: 400, message: 'Token required' })
-  }
+  const client = await serverSupabaseClient(event)
 
   try {
-    const verificationToken = await prisma.emailVerificationToken.findUnique({
-      where: { token },
-    })
-
-    if (!verificationToken || new Date() > verificationToken.expires_at) {
+    if (!token) {
       throw createError({
         statusCode: 400,
-        message: 'Token expired or invalid',
+        statusMessage: 'Token is required',
       })
     }
 
-    if (verificationToken.used_at) {
+    // ✨ Use repository to validate token
+    // Returns user_id if valid, null if invalid/expired/already-used
+    const userId = await authRepository.verifyEmailToken(token)
+
+    if (!userId) {
       throw createError({
         statusCode: 400,
-        message: 'Token already used',
+        statusMessage: 'Invalid, expired, or already used token',
       })
     }
 
-    // Mark as verified in Supabase
-    const client = await serverSupabaseClient(event)
-    const { error } = await client.auth.admin.updateUserById(verificationToken.user_id, {
-      email_confirm: true,
-    })
+    // ✨ Mark email as confirmed in Supabase
+    const { error: updateError } = await client.auth.admin.updateUserById(
+      userId,
+      { email_confirm: true }  // Sets confirmed_at automatically
+    )
 
-    if (error) throw error
+    if (updateError) {
+      throw createError({
+        statusCode: 500,
+        statusMessage: 'Failed to verify email',
+      })
+    }
 
-    // Mark token as used
-    await prisma.emailVerificationToken.update({
-      where: { id: verificationToken.id },
-      data: { used_at: new Date() },
-    })
-
-    // Log event
+    // ✨ Log successful verification
     await logAuditEvent({
       eventType: AuditEventType.EMAIL_VERIFIED,
-      userId: verificationToken.user_id,
+      userId,
       success: true,
     })
 
-    return { success: true, message: 'Email verified successfully' }
+    return {
+      success: true,
+      message: 'Email verified successfully!',
+    }
   } catch (error: any) {
+    console.error('Email verification error:', error)
+
     throw createError({
-      statusCode: 500,
-      message: 'Verification failed',
+      statusCode: error.statusCode || 500,
+      statusMessage: error.statusMessage || 'Email verification failed',
     })
   }
 })

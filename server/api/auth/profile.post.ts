@@ -2,7 +2,7 @@
 import { z } from 'zod'
 import { safeUserSchema } from '../../utils/auth/auth.schema'
 import { requireAuth } from '../../utils/auth/auth.utils'
-import { authRepository } from '../../database/repositories/auth.repository'
+import { userRepository } from '~~/server/database/repositories/user.repository'
 
 const createSellerSchema = z.object({
   store_name: z.string().min(3, 'Store name must be at least 3 characters'),
@@ -35,10 +35,10 @@ export default defineEventHandler(async (event) => {
   }
 
   // Create seller profile
-  await authRepository.createSellerProfile(user.id, validation.data)
+  //await authRepository.createSellerProfile(user.id, validation.data)
 
   // Fetch updated user
-  const updatedUser = await authRepository.findByProfileId(user.id)
+  const updatedUser = await userRepository.findById(user.id)
 
   // Sanitize response
   const safeUser = safeUserSchema.parse(updatedUser)

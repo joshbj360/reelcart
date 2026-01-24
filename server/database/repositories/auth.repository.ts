@@ -12,86 +12,16 @@
 
 import { Profile } from '~~/prisma/generated/client'
 import { prismaClient as prisma } from '../client'
+import { randomBytes } from 'crypto'
 
 export const authRepository = {
-  /**
-   * Find user by email
-   */
-  async findByEmail(email: string): Promise<Profile | null> {
-    return prisma.profile.findUnique({
-      where: { email: email.toLowerCase() },
-      include: {
-        sellerProfile: true,
-      },
-    })
-  },
 
-  /**
-   * Find user by ID
-   */
-  async findById(id: string): Promise<Profile | null> {
-    return prisma.profile.findUnique({
-      where: { id },
-      include: {
-        sellerProfile: true,
-      },
-    })
-  },
-
-  /**
-   * Create or find user profile
-   */
-  async findOrCreateProfile(data: {
-    id: string
-    email: string
-    username: string
-    avatar: string | null
-  }): Promise<Profile> {
-    return prisma.profile.upsert({
-      where: { id: data.id },
-      update: {},
-      create: {
-        id: data.id,
-        email: data.email.toLowerCase(),
-        username: data.username,
-        avatar: data.avatar,
-        role: 'user',
-      },
-      include: {
-        sellerProfile: true,
-      },
-    })
-  },
-
-  /**
-   * Update user profile
-   */
-  async updateProfile(
-    id: string,
-    data: {
-      username?: string
-      avatar?: string | null
-      email?: string
-    }
-  ): Promise<Profile | null> {
-    return prisma.profile.update({
-      where: { id },
-      data: {
-        ...(data.username && { username: data.username }),
-        ...(data.avatar !== undefined && { avatar: data.avatar }),
-        ...(data.email && { email: data.email.toLowerCase() }),
-      },
-      include: {
-        sellerProfile: true,
-      },
-    })
-  },
 
   /**
    * Create email verification token
    */
   async createEmailVerificationToken(userId: string): Promise<string> {
-    const token = crypto.randomBytes(32).toString('hex')
+    const token = randomBytes(32).toString('hex')
 
     await prisma.emailVerificationToken.create({
       data: {
@@ -143,7 +73,7 @@ export const authRepository = {
    * Create password reset token
    */
   async createPasswordResetToken(userId: string): Promise<string> {
-    const token = crypto.randomBytes(32).toString('hex')
+    const token = randomBytes(32).toString('hex')
 
     await prisma.passwordResetToken.create({
       data: {
@@ -200,16 +130,14 @@ export const authRepository = {
     })
 
     // Invalidate other unused tokens for this user
-    await prisma.passwordResetToken.updateMany(
-      {
-        where: {
-          user_id: record.user_id,
-          id: { not: record.id },
-          used_at: null,
-        },
+    await prisma.passwordResetToken.updateMany({
+      where: {
+        user_id: record.user_id,
+        id: { not: record.id },
+        used_at: null,
       },
-      { used_at: new Date() }
-    )
+      data: { used_at: new Date() },
+    })
   },
 
   /**
@@ -353,4 +281,184 @@ export const authRepository = {
       },
     })
   },
+
+  /**
+  * Create session
+  */
+  async createSession(data: {
+    userId: string
+    refreshToken: string
+    refreshTokenHash: string
+    ip: string
+    userAgent: string
+    device?: string
+    country?: string
+  }): Promise<void> {
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7 days
+
+    await prisma.session.create({
+      data: {
+        userId: data.userId,
+        refreshToken: data.refreshTokenHash,
+        ip: data.ip,
+        userAgent: data.userAgent,
+        device: data.device,
+        country: data.country,
+        expiresAt,
+        lastUsedAt: new Date()
+      }
+    })
+  },
+
+  /**
+  * Get user sessions
+  */
+  async getUserSessions(userId: string): Promise<any[]> {
+    return await prisma.session.findMany({
+      where: {
+        userId,
+        revokedAt: null
+      },
+      select: {
+        id: true,
+        device: true,
+        country: true,
+        ip: true,
+        userAgent: true,
+        createdAt: true,
+        lastUsedAt: true,
+        expiresAt: true
+      },
+      orderBy: { lastUsedAt: 'desc' }
+    })
+  },
+
+  /**
+   * Revoke session
+   */
+  async revokeSession(sessionId: string): Promise<void> {
+    await prisma.session.update({
+      where: { id: sessionId },
+      data: { revokedAt: new Date() }
+    })
+  },
+
+  /**
+   * Revoke all sessions for user
+   */
+  async revokeAllSessions(userId: string): Promise<number> {
+    const result = await prisma.session.updateMany({
+      where: {
+        userId,
+        revokedAt: null
+      },
+      data: { revokedAt: new Date() }
+    })
+
+    return result.count
+  },
+
+  /**
+   * Get session by refresh token hash
+   * 
+   * Used when client sends refresh token to get new access token
+   */
+  async getSessionByRefreshToken(refreshTokenHash: string): Promise<any | null> {
+    return await prisma.session.findUnique({
+      where: { refreshToken: refreshTokenHash }
+    })
+  },
+
+  /**
+   * Get session by ID
+   * 
+   * Used to validate or check session details
+   */
+  async getSessionById(sessionId: string): Promise<any | null> {
+    return await prisma.session.findUnique({
+      where: { id: sessionId }
+    })
+  },
+
+  /**
+   * Update session last used time
+   * 
+   * Called every time token is refreshed or used
+   * Track activity to detect dormant sessions
+   */
+  async updateSessionLastUsed(sessionId: string): Promise<void> {
+    await prisma.session.update({
+      where: { id: sessionId },
+      data: { lastUsedAt: new Date() }
+    })
+  },
+
+  /**
+   * Delete expired sessions
+   * 
+   * Cleanup method - run periodically via cron job
+   * Removes sessions older than 7 days
+   */
+  async deleteExpiredSessions(): Promise<number> {
+    const result = await prisma.session.deleteMany({
+      where: {
+        expiresAt: {
+          lt: new Date()
+        }
+      }
+    })
+
+    return result.count
+  },
+
+  /**
+   * Count active sessions for a user
+   */
+  async countActiveSessions(userId: string): Promise<number> {
+    return await prisma.session.count({
+      where: {
+        userId,
+        revokedAt: null,
+        expiresAt: { gt: new Date() }
+      }
+    })
+  },
+
+  /**
+   * Check if a refresh token exists and is valid
+   */
+  async isRefreshTokenValid(refreshTokenHash: string): Promise<boolean> {
+    const session = await prisma.session.findUnique({
+      where: { refreshToken: refreshTokenHash }
+    })
+
+    if (!session) {
+      return false
+    }
+
+    // Check if expired
+    if (new Date() > session.expiresAt) {
+      return false
+    }
+
+    // Check if revoked
+    if (session.revokedAt) {
+      return false
+    }
+
+    return true
+  },
+
+  /**
+   * Get old sessions for cleanup
+   */
+  async getOldSessions(daysOld: number = 7): Promise<any[]> {
+    const cutoffDate = new Date(Date.now() - daysOld * 24 * 60 * 60 * 1000)
+
+    return await prisma.session.findMany({
+      where: {
+        createdAt: { lt: cutoffDate }
+      }
+    })
+  }
 }

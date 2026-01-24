@@ -19,8 +19,8 @@
  */
 
 import { serverSupabaseClient } from '#supabase/server'
-import { logAuditEvent, AuditEventType } from '~/server/utils/auth/auditLog'
-import { getClientIp, getUserAgent } from '~/server/utils/security/errors'
+import { logAuditEvent, AuditEventType } from '../../utils/auth/auditLog'
+import { getClientIp, getUserAgent } from '../../utils/security/errors'
 
 export default defineEventHandler(async (event: H3Event) => {
   const ipAddress = getClientIp(event.node.req)

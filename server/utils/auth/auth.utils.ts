@@ -37,7 +37,7 @@ export async function getAuthUser(event: H3Event): Promise<ISafeUser | null> {
   }
 
   try {
-    const profile = await authRepository.findByProfileId(user.id);
+    const profile = await authRepository.findById(user.id);
     if (!profile) return null;
 
     return transformToSafeUser(profile);
