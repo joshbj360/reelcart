@@ -1,14 +1,14 @@
-// server/api/auth/register.post.ts (PROPERLY REFACTORED)
+// server/api/auth/register.post.ts
 /**
  * User Registration Endpoint
  * 
- * Keeps ALL original infrastructure:
- * - Prisma database
- * - Audit logging
- * - Crypto tokens
- * - Zod validation
- * 
- * Adds: Resend email service
+ * Flow:
+ * 1. Validate input with Zod
+ * 2. Check if email already exists
+ * 3. Create user in Supabase
+ * 4. Create email verification token
+ * 5. Send verification email via Resend
+ * 6. Log audit event
  */
 
 import { defineEventHandler, readBody, createError } from 'h3'
@@ -19,13 +19,15 @@ import { registerSchema } from '../../utils/auth/auth.schema'
 import crypto from 'crypto'
 import { serverSupabaseClient } from '#supabase/server'
 import { authRepository } from '~~/server/database/repositories/auth.repository'
+import type { H3Event } from 'h3'
+import { userRepository } from '~~/server/database/repositories/user.repository'
 
-export default defineEventHandler(async (event) => {
+export default defineEventHandler(async (event: H3Event) => {
   const body = await readBody(event)
   const { email, password } = body
 
   try {
-    // Validate input with Zod
+    // 1. Validate input with Zod
     const result = registerSchema.safeParse({ email, password })
     if (!result.success) {
       await logAuditEvent({
@@ -41,8 +43,8 @@ export default defineEventHandler(async (event) => {
       })
     }
 
-    // Check if user already exists
-   const existingUser = await authRepository.findByEmail(email)
+    // 2. Check if user already exists
+    const existingUser = await userRepository.findByEmail(email)
     if (existingUser) {
       await logAuditEvent({
         eventType: AuditEventType.REGISTER_FAILED,
@@ -57,9 +59,9 @@ export default defineEventHandler(async (event) => {
       })
     }
 
-    // Create user in Supabase
-    const supabase = serverSupabaseClient(event)
-    const { data: authData, error: authError } = await (await supabase).auth.signUp({
+    // 3. Create user in Supabase
+    const supabase = await serverSupabaseClient(event)
+    const { data: authData, error: authError } = await supabase.auth.signUp({
       email,
       password,
     })
@@ -85,10 +87,9 @@ export default defineEventHandler(async (event) => {
       })
     }
 
-    // ✨ Generate verification token
+    // 4. Generate email verification token
     const token = crypto.randomBytes(32).toString('hex')
     
-    // ✨ Store verification token in database
     await prisma.emailVerificationToken.create({
       data: {
         user_id: authData.user.id,
@@ -97,13 +98,13 @@ export default defineEventHandler(async (event) => {
       },
     })
 
-    // ✨ RESEND: Send beautiful verification email
+    // 5. Send verification email
     try {
       await sendVerificationEmail(email, token)
       console.log(`✅ Verification email sent to ${email}`)
     } catch (emailError: any) {
       console.error('Failed to send verification email:', emailError)
-      // Log but don't fail - user can resend
+      
       await logAuditEvent({
         eventType: AuditEventType.REGISTER_SUCCESS_EMAIL_VERIFICATION_FAILED,
         userId: authData.user.id,
@@ -122,7 +123,7 @@ export default defineEventHandler(async (event) => {
       }
     }
 
-    // Log successful registration
+    // 6. Log successful registration
     await logAuditEvent({
       eventType: AuditEventType.REGISTER_SUCCESS_EMAIL_VERIFICATION_SENT,
       userId: authData.user.id,
@@ -141,7 +142,6 @@ export default defineEventHandler(async (event) => {
   } catch (error: any) {
     console.error('Registration error:', error)
 
-    // Log error
     await logAuditEvent({
       eventType: AuditEventType.REGISTER_FAILED_EMAIL_VERIFICATION_FAILED,
       email: body.email,

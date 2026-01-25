@@ -20,6 +20,8 @@ export const safeSellerProfileSchema = z.object({
   store_name: z.string().nullable(),
   store_slug: z.string(),
   is_verified: z.boolean(),
+  is_active: z.boolean(),
+  created_at: z.date().or(z.string()),
   followers_count: z.number().default(0),
 });
 

@@ -2,20 +2,25 @@
 /**
  * Auth Repository
  * 
- * Database operations for authentication
- * Includes methods for:
- * - User profiles
- * - Email verification
+ * ONLY handles authentication-related database operations:
+ * - Email verification tokens
  * - Password reset tokens
+ * - Failed login attempts & account lockout
  * - Audit logging
+ * - Session management (tracking only)
+ * 
+ * Seller-related operations moved to: seller.repository.ts
+ * User profile operations: user.repository.ts
  */
 
-import { Profile } from '~~/prisma/generated/client'
 import { prismaClient as prisma } from '../client'
 import { randomBytes } from 'crypto'
 
 export const authRepository = {
 
+  // ============================================
+  // EMAIL VERIFICATION
+  // ============================================
 
   /**
    * Create email verification token
@@ -48,7 +53,6 @@ export const authRepository = {
 
     // Check if expired
     if (new Date() > record.expires_at) {
-      // Delete expired token
       await prisma.emailVerificationToken.delete({
         where: { token },
       })
@@ -68,6 +72,10 @@ export const authRepository = {
 
     return record.user_id
   },
+
+  // ============================================
+  // PASSWORD RESET
+  // ============================================
 
   /**
    * Create password reset token
@@ -140,21 +148,9 @@ export const authRepository = {
     })
   },
 
-  /**
-   * Check if email is verified in Supabase
-   */
-  async isEmailVerified(userId: string): Promise<boolean> {
-    // This would require a Supabase admin call
-    // For now, we check if email verification token exists and hasn't been used
-    const token = await prisma.emailVerificationToken.findFirst({
-      where: {
-        user_id: userId,
-        used_at: { not: null },
-      },
-    })
-
-    return !!token || process.env.REQUIRE_EMAIL_VERIFICATION === 'false'
-  },
+  // ============================================
+  // FAILED LOGIN ATTEMPTS & ACCOUNT LOCKOUT
+  // ============================================
 
   /**
    * Get failed login attempts
@@ -193,7 +189,7 @@ export const authRepository = {
   async clearFailedAttempts(email: string): Promise<any> {
     return prisma.failedLoginAttempt.delete({
       where: { email: email.toLowerCase() },
-    }).catch(() => null) // Ignore if doesn't exist
+    }).catch(() => null)
   },
 
   /**
@@ -228,13 +224,16 @@ export const authRepository = {
 
     // Check if lock has expired
     if (new Date() > attempt.locked_until) {
-      // Clear the lock
       await this.clearFailedAttempts(email)
       return false
     }
 
     return true
   },
+
+  // ============================================
+  // AUDIT LOGGING
+  // ============================================
 
   /**
    * Get all audit logs for user
@@ -267,14 +266,12 @@ export const authRepository = {
   async cleanupExpiredTokens(): Promise<void> {
     const now = new Date()
 
-    // Delete expired email verification tokens
     await prisma.emailVerificationToken.deleteMany({
       where: {
         expires_at: { lt: now },
       },
     })
 
-    // Delete expired password reset tokens
     await prisma.passwordResetToken.deleteMany({
       where: {
         expires_at: { lt: now },
@@ -282,13 +279,16 @@ export const authRepository = {
     })
   },
 
+  // ============================================
+  // SESSION MANAGEMENT (for tracking only)
+  // ============================================
+
   /**
-  * Create session
-  */
+   * Create session (for tracking only - not auth validation)
+   */
   async createSession(data: {
     userId: string
     refreshToken: string
-    refreshTokenHash: string
     ip: string
     userAgent: string
     device?: string
@@ -299,7 +299,7 @@ export const authRepository = {
     await prisma.session.create({
       data: {
         userId: data.userId,
-        refreshToken: data.refreshTokenHash,
+        refreshToken: data.refreshToken,
         ip: data.ip,
         userAgent: data.userAgent,
         device: data.device,
@@ -311,8 +311,8 @@ export const authRepository = {
   },
 
   /**
-  * Get user sessions
-  */
+   * Get user sessions
+   */
   async getUserSessions(userId: string): Promise<any[]> {
     return await prisma.session.findMany({
       where: {
@@ -359,20 +359,16 @@ export const authRepository = {
   },
 
   /**
-   * Get session by refresh token hash
-   * 
-   * Used when client sends refresh token to get new access token
+   * Get session by refresh token
    */
-  async getSessionByRefreshToken(refreshTokenHash: string): Promise<any | null> {
+  async getSessionByRefreshToken(refreshToken: string): Promise<any | null> {
     return await prisma.session.findUnique({
-      where: { refreshToken: refreshTokenHash }
+      where: { refreshToken }
     })
   },
 
   /**
    * Get session by ID
-   * 
-   * Used to validate or check session details
    */
   async getSessionById(sessionId: string): Promise<any | null> {
     return await prisma.session.findUnique({
@@ -382,9 +378,6 @@ export const authRepository = {
 
   /**
    * Update session last used time
-   * 
-   * Called every time token is refreshed or used
-   * Track activity to detect dormant sessions
    */
   async updateSessionLastUsed(sessionId: string): Promise<void> {
     await prisma.session.update({
@@ -395,9 +388,6 @@ export const authRepository = {
 
   /**
    * Delete expired sessions
-   * 
-   * Cleanup method - run periodically via cron job
-   * Removes sessions older than 7 days
    */
   async deleteExpiredSessions(): Promise<number> {
     const result = await prisma.session.deleteMany({
@@ -422,31 +412,6 @@ export const authRepository = {
         expiresAt: { gt: new Date() }
       }
     })
-  },
-
-  /**
-   * Check if a refresh token exists and is valid
-   */
-  async isRefreshTokenValid(refreshTokenHash: string): Promise<boolean> {
-    const session = await prisma.session.findUnique({
-      where: { refreshToken: refreshTokenHash }
-    })
-
-    if (!session) {
-      return false
-    }
-
-    // Check if expired
-    if (new Date() > session.expiresAt) {
-      return false
-    }
-
-    // Check if revoked
-    if (session.revokedAt) {
-      return false
-    }
-
-    return true
   },
 
   /**

@@ -2,130 +2,49 @@
 /**
  * Session Service
  * 
- * Manages user sessions, refresh tokens, and access tokens
- * Uses repositories for database access (NO direct Prisma)
+ * Manages user sessions for tracking only
+ * Authentication is handled by Supabase
+ * 
+ * This service:
+ * - Creates session records for device tracking
+ * - Manages multi-device sessions
+ * - Provides device management (revoke sessions)
+ * - Does NOT handle token validation
  */
 
-import crypto from 'crypto'
-import { authRepository } from '~~/server/database/repositories/auth.repository'
+import { authRepository } from '../../server/database/repositories/auth.repository'
 
 export interface CreateSessionInput {
   userId: string
+  refreshToken: string
   ip: string
   userAgent: string
   device?: string
   country?: string
 }
 
-export interface SessionInfo {
-  accessToken: string
-  refreshToken: string
-  expiresIn: number
-  tokenType: 'Bearer'
-}
-
-const ACCESS_TOKEN_EXPIRY_MINUTES = 15
-const REFRESH_TOKEN_EXPIRY_DAYS = 7
-
 export const sessionService = {
   /**
    * Create a new session after user login
+   * 
+   * This just records the session for tracking/analytics
+   * Actual token validation is done by Supabase
    */
-  async createSession(input: CreateSessionInput): Promise<SessionInfo> {
+  async createSession(input: CreateSessionInput): Promise<void> {
     try {
-      // Generate refresh token
-      const refreshToken = crypto.randomBytes(32).toString('hex')
-      const refreshTokenHash = crypto
-        .createHash('sha256')
-        .update(refreshToken)
-        .digest('hex')
-
-      // Create session using your repository
       await authRepository.createSession({
         userId: input.userId,
-        refreshToken,
-        refreshTokenHash,
+        refreshToken: input.refreshToken,
         ip: input.ip,
         userAgent: input.userAgent,
         device: input.device,
         country: input.country
       })
 
-      // Generate access token
-      const accessToken = crypto.randomBytes(32).toString('hex')
-
-      return {
-        accessToken,
-        refreshToken,
-        expiresIn: ACCESS_TOKEN_EXPIRY_MINUTES * 60,
-        tokenType: 'Bearer'
-      }
+      console.log(`[SessionService] Session created for user ${input.userId}`)
     } catch (error) {
       console.error('[SessionService] Create session error:', error)
       throw new Error('Failed to create session')
-    }
-  },
-
-  /**
-   * Verify refresh token and return new access token
-   */
-  async refreshAccessToken(
-    refreshToken: string,
-    ip: string,
-    userAgent: string
-  ): Promise<SessionInfo | null> {
-    try {
-      // Hash the token
-      const refreshTokenHash = crypto
-        .createHash('sha256')
-        .update(refreshToken)
-        .digest('hex')
-
-      // Get session from repository
-      const session = await authRepository.getSessionByRefreshToken(
-        refreshTokenHash
-      )
-
-      if (!session) {
-        console.warn('[SessionService] Refresh token not found')
-        return null
-      }
-
-      // Check if expired
-      if (new Date() > session.expiresAt) {
-        console.warn('[SessionService] Refresh token expired')
-        await authRepository.revokeSession(session.id)
-        return null
-      }
-
-      // Check if revoked
-      if (session.revokedAt) {
-        console.warn('[SessionService] Refresh token revoked')
-        return null
-      }
-
-      // SECURITY: Check IP and User Agent match
-      if (session.ip !== ip || session.userAgent !== userAgent) {
-        console.warn('[SessionService] IP or User Agent mismatch')
-        await authRepository.revokeSession(session.id)
-        return null
-      }
-
-      // Update last used
-      await authRepository.updateSessionLastUsed(session.id)
-
-      // Generate new access token
-      const accessToken = crypto.randomBytes(32).toString('hex')
-
-      return {
-        accessToken,
-        refreshToken,
-        expiresIn: ACCESS_TOKEN_EXPIRY_MINUTES * 60,
-        tokenType: 'Bearer'
-      }
-    } catch (error) {
-      console.error('[SessionService] Refresh access token error:', error)
-      return null
     }
   },
 
@@ -155,7 +74,7 @@ export const sessionService = {
   },
 
   /**
-   * Revoke all sessions for a user
+   * Revoke all sessions for a user (logout everywhere)
    */
   async revokeAllSessions(userId: string): Promise<number> {
     try {
@@ -172,6 +91,7 @@ export const sessionService = {
 
   /**
    * Clean up expired sessions
+   * Run periodically via cron job
    */
   async cleanupExpiredSessions(): Promise<number> {
     try {
@@ -189,10 +109,7 @@ export const sessionService = {
   /**
    * Check if session is valid
    */
-  async isSessionValid(
-    sessionId: string,
-    ip?: string
-  ): Promise<boolean> {
+  async isSessionValid(sessionId: string, ip?: string): Promise<boolean> {
     try {
       const session = await authRepository.getSessionById(sessionId)
 
@@ -221,6 +138,7 @@ export const sessionService = {
 
   /**
    * Detect suspicious sessions
+   * Alerts if many sessions from different IPs/countries
    */
   async getSuspiciousSessions(userId: string): Promise<any[]> {
     try {

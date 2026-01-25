@@ -1,17 +1,21 @@
-// server/api/auth/verify-email.post.ts (PROPER - Using Repository)
+// server/api/auth/verify-email.post.ts
 /**
  * Verify Email Endpoint
- * Uses auth.repository for token validation (single source of truth)
+ * 
+ * POST /api/auth/verify-email
+ * Body: { token: string }
+ * 
+ * Verifies email token and marks email as confirmed in Supabase
  */
+
 import { serverSupabaseClient } from '#supabase/server'
-import { defineEventHandler, readBody, createError } from 'h3'
+import { defineEventHandler, readBody, createError, type H3Event } from 'h3'
 import { authRepository } from '../../database/repositories/auth.repository'
 import { logAuditEvent, AuditEventType } from '../../utils/auth/auditLog'
 
-export default defineEventHandler(async (event) => {
+export default defineEventHandler(async (event: H3Event) => {
   const { token } = await readBody(event)
-  const client = await serverSupabaseClient(event)
-
+  
   try {
     if (!token) {
       throw createError({
@@ -20,7 +24,7 @@ export default defineEventHandler(async (event) => {
       })
     }
 
-    // ✨ Use repository to validate token
+    // Validate token using repository
     // Returns user_id if valid, null if invalid/expired/already-used
     const userId = await authRepository.verifyEmailToken(token)
 
@@ -31,10 +35,11 @@ export default defineEventHandler(async (event) => {
       })
     }
 
-    // ✨ Mark email as confirmed in Supabase
+    // Mark email as confirmed in Supabase
+    const client = await serverSupabaseClient(event)
     const { error: updateError } = await client.auth.admin.updateUserById(
       userId,
-      { email_confirm: true }  // Sets confirmed_at automatically
+      { email_confirm: true }
     )
 
     if (updateError) {
@@ -44,7 +49,7 @@ export default defineEventHandler(async (event) => {
       })
     }
 
-    // ✨ Log successful verification
+    // Log successful verification
     await logAuditEvent({
       eventType: AuditEventType.EMAIL_VERIFIED,
       userId,
@@ -57,6 +62,12 @@ export default defineEventHandler(async (event) => {
     }
   } catch (error: any) {
     console.error('Email verification error:', error)
+
+    await logAuditEvent({
+      eventType: AuditEventType.REGISTER_FAILED,
+      success: false,
+      reason: error.message,
+    })
 
     throw createError({
       statusCode: error.statusCode || 500,

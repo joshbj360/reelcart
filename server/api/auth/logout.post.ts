@@ -4,19 +4,19 @@
  * 
  * POST /api/auth/logout
  * 
- * Revokes all sessions for the user
+ * Revokes all sessions for the user (logout everywhere)
  */
 
-import { defineEventHandler, createError, deleteCookie } from 'h3'
-import { requireAuth } from '~~/server/middleware/auth'
+import { defineEventHandler, createError, deleteCookie, type H3Event } from 'h3'
+import { requireAuth } from '~~/server/utils/auth/auth'
 import { sessionService } from '~~/server/services/session.service'
 
-export default defineEventHandler(async (event) => {
+export default defineEventHandler(async (event: H3Event) => {
   try {
     // Authenticate user
     const user = await requireAuth(event)
 
-    // Revoke all sessions
+    // Revoke all sessions (logout everywhere)
     await sessionService.revokeAllSessions(user.id)
 
     // Clear refresh token cookie

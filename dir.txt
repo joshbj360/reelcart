@@ -1,0 +1,171 @@
+Directory structure:
+└── joshbj360-reelcart/
+    ├── README.md
+    ├── nuxt.config.ts
+    ├── prisma.config.ts
+    ├── setup-vitest.ts
+    ├── tsconfig.json
+    ├── vitest.config.ts
+    ├── vitest.setup.ts
+    ├── .nuxtrc
+    ├── app/
+    │   ├── app.vue
+    │   └── pages/
+    │       └── index.vue
+    ├── layers/
+    │   ├── auth/
+    │   │   ├── nuxt.config.ts
+    │   │   └── app/
+    │   │       ├── components/
+    │   │       │   └── PasswordStrengthMeter.vue
+    │   │       ├── composables/
+    │   │       │   ├── useAuth.ts
+    │   │       │   └── usePasswordReset.ts
+    │   │       ├── layouts/
+    │   │       │   └── AuthLayout.vue
+    │   │       ├── middleware/
+    │   │       │   └── auth.global.ts
+    │   │       ├── pages/
+    │   │       │   ├── forgot-password.vue
+    │   │       │   ├── resend-verification.vue
+    │   │       │   ├── reset-password.vue
+    │   │       │   ├── user-login.vue
+    │   │       │   ├── user-register.vue
+    │   │       │   └── verify-email.vue
+    │   │       ├── plugins/
+    │   │       │   └── auth-lifecycle.client.ts
+    │   │       ├── services/
+    │   │       │   └── auth.api.ts
+    │   │       ├── stores/
+    │   │       │   └── auth.store.ts
+    │   │       ├── tests/
+    │   │       │   ├── auth.api.test.ts
+    │   │       │   ├── auth.integration.test.ts
+    │   │       │   ├── auth.security.test.ts
+    │   │       │   ├── auth.server.test.ts
+    │   │       │   ├── auth.store.test.ts
+    │   │       │   ├── auth.utils.test.ts
+    │   │       │   └── test-helpers.ts
+    │   │       └── types/
+    │   │           └── auth.types.ts
+    │   ├── base/
+    │   │   ├── nuxt.config.ts
+    │   │   └── app/
+    │   │       ├── assets/
+    │   │       │   └── css/
+    │   │       │       └── main.css
+    │   │       ├── components/
+    │   │       │   ├── shared/
+    │   │       │   │   ├── AccordionItem.vue
+    │   │       │   │   ├── CurrencyInput.vue
+    │   │       │   │   ├── Loading.vue
+    │   │       │   │   ├── MediaLibraryModal.vue
+    │   │       │   │   ├── MediaPreview.vue
+    │   │       │   │   ├── NumberInput.vue
+    │   │       │   │   ├── RichTextEditor.vue
+    │   │       │   │   ├── SellerProfileSkeleton.vue
+    │   │       │   │   ├── TagInput.vue
+    │   │       │   │   └── TextInput.vue
+    │   │       │   └── skeletons/
+    │   │       │       ├── AddressSkeleton.vue
+    │   │       │       ├── CartSkeleton.vue
+    │   │       │       ├── CategoryPageSkeleton.vue
+    │   │       │       ├── CheckoutSkeleton.vue
+    │   │       │       ├── DashboardSkeleton.vue
+    │   │       │       ├── HomePageSkeleton.vue
+    │   │       │       ├── LeftPaneSkeleton.vue
+    │   │       │       ├── ProductFeedSkeleton.vue
+    │   │       │       ├── ProductGridSkeleton.vue
+    │   │       │       ├── ProductPageSkeleton.vue
+    │   │       │       ├── RightPaneSkeleton.vue
+    │   │       │       ├── SellerProfileSkeleton.vue
+    │   │       │       └── UploadSkeleton.vue
+    │   │       ├── composables/
+    │   │       │   └── useLayoutData.ts
+    │   │       ├── plugins/
+    │   │       │   └── zod-i18n.ts
+    │   │       ├── services/
+    │   │       │   ├── api/
+    │   │       │   │   ├── api.error.ts
+    │   │       │   │   └── base.api.ts
+    │   │       │   └── pubSub/
+    │   │       │       └── realTimeService.ts
+    │   │       ├── stores/
+    │   │       │   └── core.store.ts
+    │   │       ├── types/
+    │   │       │   └── supabase.ts
+    │   │       └── utils/
+    │   │           ├── eventBus.ts
+    │   │           ├── formatters.ts
+    │   │           ├── location-data.ts
+    │   │           └── nigeria-states-lgas.ts
+    │   ├── commerce/
+    │   │   └── nuxt.config.ts
+    │   ├── marketplace/
+    │   │   └── nuxt.config.ts
+    │   └── social/
+    │       ├── nuxt.config.ts
+    │       └── stores/
+    │           └── feed.stores.ts
+    ├── locales/
+    │   └── en.json
+    ├── prisma/
+    │   └── schema.prisma
+    ├── public/
+    │   └── robots.txt
+    ├── scripts/
+    │   └── diagnose.sh
+    ├── server/
+    │   ├── api/
+    │   │   └── auth/
+    │   │       ├── forgot-password.post.ts
+    │   │       ├── login.post.ts
+    │   │       ├── logout.post.ts
+    │   │       ├── me.get.ts
+    │   │       ├── profile.get.ts
+    │   │       ├── profile.post.ts
+    │   │       ├── refresh-token.ts
+    │   │       ├── register.post.ts
+    │   │       ├── reset-password.post.ts
+    │   │       ├── send-password-reset-email.post.ts
+    │   │       ├── send-verification-email.post.ts
+    │   │       └── verify-email.post.ts
+    │   ├── database/
+    │   │   ├── client.ts
+    │   │   ├── slugExtension.ts
+    │   │   └── repositories/
+    │   │       ├── auth.repository.ts
+    │   │       └── user.repository.ts
+    │   ├── middleware/
+    │   │   ├── auth.ts
+    │   │   ├── csrf-init.ts
+    │   │   ├── csrf.ts
+    │   │   ├── rateLimiter.ts
+    │   │   └── security.ts
+    │   ├── plugins/
+    │   │   └── monitoring.ts
+    │   ├── services/
+    │   │   └── session.service.ts
+    │   └── utils/
+    │       ├── db.ts
+    │       ├── slugify.ts
+    │       ├── auth/
+    │       │   ├── auditLog.ts
+    │       │   ├── auth.schema.ts
+    │       │   ├── auth.utils.ts
+    │       │   ├── passwordValidator.ts
+    │       │   └── rateLimiter.ts
+    │       ├── email/
+    │       │   └── emailService.ts
+    │       ├── monitoring/
+    │       │   └── authMonitoring.ts
+    │       └── security/
+    │           ├── csrf.ts
+    │           └── errors.ts
+    └── test/
+        ├── setup.ts
+        ├── auth/
+        │   └── complete-auth-spec.ts
+        └── mocks/
+            ├── middleware.ts
+            └── supabase.ts

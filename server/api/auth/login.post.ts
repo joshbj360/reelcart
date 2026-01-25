@@ -7,7 +7,9 @@
  * - Audit logging
  * - Brute force protection
  * - Email verification check
- * - Secure error messages
+ * - Session tracking (device, IP, location)
+ * 
+ * NOTE: Does NOT create seller profile - that's separate
  */
 
 import { serverSupabaseClient } from '#supabase/server'
@@ -21,6 +23,7 @@ import type { H3Event } from 'h3'
 import { userRepository } from '~~/server/database/repositories/user.repository'
 import { sessionService } from '~~/server/services/session.service'
 import { parseUserAgent } from '../../utils/security/parseUserAgent'
+import crypto from 'crypto'
 
 /**
  * Middleware to protect this endpoint
@@ -52,10 +55,8 @@ export default defineEventHandler(async (event: H3Event) => {
     // 3. Rate Limiting - Check before auth attempt
     try {
       const { remaining } = checkRateLimit(email, rateLimitConfig.login)
-      // Add rate limit info to response headers (don't expose in body)
       setResponseHeader(event, 'X-RateLimit-Remaining', String(remaining))
     } catch (rateLimitError: any) {
-      // Log rate limit exceeded
       await logAuditEvent({
         eventType: AuditEventType.LOGIN_FAILED_RATE_LIMITED,
         email,
@@ -100,7 +101,7 @@ export default defineEventHandler(async (event: H3Event) => {
       }
     }
 
-    // 6. Fetch/create user profile from database
+    // 6. Fetch/create user profile from database (NO seller profile)
     const profile = await userRepository.findOrCreateProfile({
       id: data.user!.id,
       email: data.user!.email!,
@@ -108,21 +109,27 @@ export default defineEventHandler(async (event: H3Event) => {
       avatar: data.user!.user_metadata?.avatar_url || null,
     })
 
-     // Create session
-  const sessionInfo = await sessionService.createSession({
-    userId: data.user!.id,
-    ip: getClientIp(event),
-    userAgent: getHeader(event, 'user-agent') || '',
-    device: parseUserAgent(userAgent)
-  })
+    // 7. Create session for tracking (device, IP, location)
+    const refreshTokenHash = crypto
+      .createHash('sha256')
+      .update(data.session?.refresh_token || '')
+      .digest('hex')
 
-    // 7. Validate response with Zod
+    await sessionService.createSession({
+      userId: data.user!.id,
+      refreshToken: refreshTokenHash,
+      ip: ipAddress,
+      userAgent: userAgent,
+      device: parseUserAgent(userAgent),
+    })
+
+    // 8. Validate response with Zod
     const safeUser = safeUserSchema.parse(profile)
 
-    // 8. Clear rate limit on successful login
+    // 9. Clear rate limit on successful login
     clearRateLimit(email, rateLimitConfig.login.keyPrefix)
 
-    // 9. Log successful login
+    // 10. Log successful login
     await logAuditEvent({
       eventType: AuditEventType.LOGIN_SUCCESS,
       userId: data.user!.id,
@@ -132,23 +139,20 @@ export default defineEventHandler(async (event: H3Event) => {
       success: true,
     })
 
-    // 10. Return safe response
+    // 11. Return Supabase tokens ONLY
     return {
+      success: true,
       user: safeUser,
-      session: {
-        access_token: data.session?.access_token,
-        refresh_token: data.session?.refresh_token,
-        expires_in: data.session?.expires_in,
-        expires_at: data.session?.expires_at,
-      },
+      access_token: data.session?.access_token,
+      refresh_token: data.session?.refresh_token,
+      expires_in: data.session?.expires_in,
+      expires_at: data.session?.expires_at,
     }
   } catch (error: any) {
-    // Don't expose internal errors
     if (error.statusCode && error.statusCode < 500) {
       throw error
     }
 
-    // Log unexpected errors
     console.error('Login endpoint error:', {
       error: error.message,
       stack: error.stack,

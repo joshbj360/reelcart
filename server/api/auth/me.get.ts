@@ -8,7 +8,7 @@
  */
 
 import { defineEventHandler, createError } from 'h3'
-import { requireAuth } from '../../middleware/auth'
+import { requireAuth } from '../../utils/auth/auth'
 
 export default defineEventHandler(async (event) => {
   try {

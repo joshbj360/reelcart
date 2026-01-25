@@ -1,4 +1,4 @@
-// layers/auth/services/auth.api.ts
+// layers/auth/services/auth.api.ts - UPDATED WITH SELLER METHODS
 /**
  * Auth API Service
  * 
@@ -46,18 +46,7 @@ export class AuthApiClient extends BaseApiClient {
   }
 
   /**
-   * Update user profile
-   */
-  async updateProfile(data: Record<string, any>): Promise<any> {
-    return this.request('/api/auth/profile', {
-      method: 'POST',
-      body: data,
-    })
-  }
-
-  /**
    * Request password reset
-   * Sends reset link to email
    */
   async requestPasswordReset(email: string): Promise<any> {
     return this.request('/api/auth/forgot-password', {
@@ -68,7 +57,6 @@ export class AuthApiClient extends BaseApiClient {
 
   /**
    * Complete password reset
-   * Validates token and sets new password
    */
   async completePasswordReset(token: string, password: string): Promise<any> {
     return this.request('/api/auth/reset-password', {
@@ -91,7 +79,7 @@ export class AuthApiClient extends BaseApiClient {
    * Resend email verification link
    */
   async resendEmailVerification(email: string): Promise<any> {
-    return this.request('/api/auth/verify-email/resend', {
+    return this.request('/api/auth/send-verification-email', {
       method: 'POST',
       body: { email },
     })
@@ -137,22 +125,52 @@ export class AuthApiClient extends BaseApiClient {
     }
   }
 
+  // ========== SELLER PROFILE METHODS ==========
+
   /**
    * Create seller profile
    */
-  async createSellerProfile(data: Record<string, any>): Promise<any> {
-    return this.request('/api/auth/seller/profile', {
+  async createSellerProfile(data: Partial<ISafeSellerProfile>): Promise<any> {
+    return this.request('/api/seller/register', {
       method: 'POST',
       body: data,
     })
   }
 
   /**
-   * Get seller profile by slug
+   * Get all seller profiles for user
+   */
+  async getSellerProfiles(): Promise<any> {
+    return this.request('/api/seller/list', {
+      method: 'GET',
+    })
+  }
+
+  /**
+   * Get seller profile by slug (public)
    */
   async getSellerBySlug(slug: string): Promise<any> {
-    return this.request(`/api/auth/seller/${slug}`, {
+    return this.request(`/api/seller/${slug}`, {
       method: 'GET',
+      skipAuth: true, // Public endpoint
+    })
+  }
+
+  /**
+   * Deactivate seller profile
+   */
+  async deactivateSellerProfile(sellerId: string): Promise<any> {
+    return this.request(`/api/seller/${sellerId}/deactivate`, {
+      method: 'POST',
+    })
+  }
+
+  /**
+   * Activate seller profile
+   */
+  async activateSellerProfile(sellerId: string): Promise<any> {
+    return this.request(`/api/seller/${sellerId}/activate`, {
+      method: 'POST',
     })
   }
 }

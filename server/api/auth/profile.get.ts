@@ -1,40 +1,28 @@
-// server/api/user/profile.get.ts
+// server/api/auth/profile.get.ts
 /**
- * Get User Profile
+ * Get Current User Profile
  * 
- * GET /api/user/profile
+ * GET /api/auth/profile
  * 
- * Returns authenticated user's profile
- * 
- * Protected: YES (requires auth)
+ * Returns authenticated user's complete profile
+ * Protected: YES (requires Bearer token)
  */
 
-import { defineEventHandler, createError } from 'h3'
-import { requireAuth } from '~~/server/middleware/auth'
-import { userRepository } from '~~/server/database/repositories/user.repository'
+import { defineEventHandler, createError, type H3Event } from 'h3'
+import { requireAuth } from '~~/server/utils/auth/auth'
+import { safeUserSchema } from '../../utils/auth/auth.schema'
 
-export default defineEventHandler(async (event) => {
+export default defineEventHandler(async (event: H3Event) => {
   try {
-    // Require authentication
+    // Authenticate user
     const user = await requireAuth(event)
 
-    const profile = await userRepository.findOrCreateProfile({
-      id: user.id,
-      email: user.email,
-      username: user?.username || 'User_' + Math.floor(Math.random() * 10000),
-      avatar: user.avatar || null
-    })
-
-    if (!profile) {
-      throw createError({
-        statusCode: 404,
-        statusMessage: 'Profile not found'
-      })
-    }
+    // Validate with Zod to ensure safe user structure
+    const safeUser = safeUserSchema.parse(user)
 
     return {
       success: true,
-      data: profile
+      user: safeUser
     }
   } catch (error: any) {
     if (error.statusCode) {

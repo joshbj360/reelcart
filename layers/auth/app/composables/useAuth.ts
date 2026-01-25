@@ -1,91 +1,125 @@
+// layers/auth/composables/useAuth.ts
+/**
+ * Auth Composable
+ * 
+ * Wrapper around auth store with navigation logic
+ * RULE: Only calls store methods, never API/repository directly
+ */
+
 import { useAuthStore } from '../stores/auth.store'
 import type { ILoginCredentials, IRegisterData } from '../types/auth.types'
-import { useRouter } from 'vue-router'
+import { useRouter } from 'nuxt/app'
+import { computed } from 'vue'
 
-/**
- * Auth composable - Provides convenient wrapper around auth store
- * 
- * RULE: Composables ONLY call store methods, never API or repository directly
- */
 export const useAuth = () => {
   const authStore = useAuthStore()
   const router = useRouter()
 
   /**
-   * Login wrapper
-   * Adds navigation logic on top of store.login()
+   * Login wrapper with navigation
    */
-  // composables/useAuth.ts
+  const login = async (credentials: ILoginCredentials) => {
+    const result = await authStore.login(credentials)
+    
+    if (result.success) {
+      const isSeller = authStore.isSeller
+      router.push(isSeller ? '/sellers/dashboard' : '/')
+      return result
+    }
 
-const login = async (credentials: ILoginCredentials) => {
-  const result = await authStore.login(credentials)
-  
-  // Case A: Success
-  if (result.success) {
-    const isSeller = authStore.isSeller
-    router.push(isSeller ? '/sellers/dashboard' : '/')
+    // Handle specific error codes
+    if (result.code === 'EMAIL_NOT_VERIFIED') {
+      navigateTo(`/resend-verification?email=${encodeURIComponent(credentials.email)}`)
+      return result
+    }
+
     return result
   }
-
-  // Case B: Email Not Verified (Handle the specific error)
-  // Ensure this string matches what you defined in AuthErrorCode.EMAIL_NOT_VERIFIED
-  if (result.code === 'EMAIL_NOT_VERIFIED') {
-    // Optional: Pass the email in the query so the verify page can pre-fill it
-    navigateTo(`/resend-verification?email=${encodeURIComponent(credentials.email)}`)
-    return result
-  }
-
-  // Case C: Other Errors (Wrong password, etc.)
-  // The store already handled the notification/toast
-  return result
-}
 
   /**
    * Register wrapper
-   * Just delegates to store
    */
   const register = async (data: IRegisterData) => {
-    return authStore.register(data) // ✅ Calls store only
+    return authStore.register(data)
   }
 
   /**
-   * Logout wrapper
-   * Adds navigation logic
+   * Logout wrapper with navigation
    */
   const logout = async () => {
-    await authStore.logout() // ✅ Calls store only
-    router.push('/auth/login')
+    await authStore.logout()
   }
 
   /**
    * OAuth login wrapper
    */
   const loginWithOAuth = async (provider: 'google' | 'facebook') => {
-    await authStore.loginWithOAuth(provider) // ✅ Calls store only
+    await authStore.loginWithOAuth(provider)
   }
 
-  // Return reactive store state and wrapper methods
+  /**
+   * Fetch user profile
+   */
+  const fetchUserProfile = async () => {
+    await authStore.fetchUserProfile()
+  }
+
+  /**
+   * Fetch seller profiles
+   */
+  const fetchSellerProfiles = async () => {
+    await authStore.fetchSellerProfiles()
+  }
+
+  /**
+   * Create seller profile
+   */
+  const createSellerProfile = async (data: any) => {
+    return authStore.createSellerProfile(data)
+  }
+
+  /**
+   * Deactivate seller
+   */
+  const deactivateSellerProfile = async (sellerId: string) => {
+    return authStore.deactivateSellerProfile(sellerId)
+  }
+
+  /**
+   * Activate seller
+   */
+  const activateSellerProfile = async (sellerId: string) => {
+    return authStore.activateSellerProfile(sellerId)
+  }
+
   return {
-    // State (from store)
+    // State (computed)
     user: computed(() => authStore.user),
+    userProfile: computed(() => authStore.userProfile),
+    sellerProfiles: computed(() => authStore.sellerProfiles),
     loading: computed(() => authStore.isLoading),
     error: computed(() => authStore.error),
     
-    // Getters (from store)
+    // Getters
     isAuthenticated: computed(() => authStore.isAuthenticated),
     isLoggedIn: computed(() => authStore.isLoggedIn),
     isSeller: computed(() => authStore.isSeller),
     isVerifiedSeller: computed(() => authStore.isVerifiedSeller),
-    sellerProfile: computed(() => authStore.sellerProfile),
+    hasSellers: computed(() => authStore.hasSellers),
+    activeSellers: computed(() => authStore.activeSellers),
+    inactiveSellers: computed(() => authStore.inactiveSellers),
+    primarySeller: computed(() => authStore.primarySeller),
     
-    // Actions (wrapper methods)
+    // Actions
     login,
     register,
     logout,
     loginWithOAuth,
-    fetchUserProfile: authStore.fetchUserProfile,
-    createSellerProfile: authStore.createSellerProfile,
-    clearError: authStore.clearError,
+    fetchUserProfile,
+    fetchSellerProfiles,
+    createSellerProfile,
+    deactivateSellerProfile,
+    activateSellerProfile,
+    clearError: () => authStore.clearError(),
   }
 }
-

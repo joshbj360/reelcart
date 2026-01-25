@@ -1,31 +1,40 @@
+// layers/auth/stores/auth.store.ts
+/**
+ * Auth Store (Pinia)
+ * 
+ * Manages:
+ * - User profile (single)
+ * - Seller profiles (multiple - array)
+ * - Authentication state
+ * - Loading and error states
+ */
+
 import { defineStore } from 'pinia'
 import { useAuthApi } from '../services/auth.api'
 import type { ISafeUser, ISafeSellerProfile, ILoginCredentials, IRegisterData } from '../types/auth.types'
-import { safeUserSchema } from '~~/server/utils/auth/auth.schema'
+import { safeUserSchema } from '../../../../server/utils/auth/auth.schema'
 import { notify } from '@kyvg/vue3-notification'
-import {  navigateTo } from 'nuxt/app'
+import { navigateTo } from 'nuxt/app'
 import { ref, computed } from 'vue'
 
 export const useAuthStore = defineStore('auth', () => {
   // ========== STATE ==========
   const userProfile = ref<ISafeUser | null>(null)
-  const sellerCache = ref<Record<string, ISafeSellerProfile>>({})
+  const sellerProfiles = ref<ISafeSellerProfile[]>([])  // ← ARRAY (multiple sellers)
   const isLoading = ref(false)
   const error = ref<string | null>(null)
 
   // ========== GETTERS ==========
   const isLoggedIn = computed(() => {
     if (userProfile.value) return true
-    const supabaseUser = useSupabaseUser()
-    return !!supabaseUser.value
+    return false
   })
 
-  const isAuthenticated = computed(() => isLoggedIn.value) // Alias for consistency
+  const isAuthenticated = computed(() => isLoggedIn.value)
 
   const user = computed(() => {
     if (!userProfile.value) return null
 
-    // Return only safe fields validated by Zod
     return {
       id: userProfile.value.id,
       email: userProfile.value.email,
@@ -35,41 +44,67 @@ export const useAuthStore = defineStore('auth', () => {
     }
   })
 
-  const isSeller = computed(() => userProfile.value?.role === 'seller')
-  const isVerifiedSeller = computed(() => 
-    userProfile.value?.sellerProfile?.is_verified || false
+  // ========== SELLER GETTERS ==========
+  
+  const hasSellers = computed(() => sellerProfiles.value.length > 0)
+  
+  const activeSellerCount = computed(() => 
+    sellerProfiles.value.filter(s => s.is_active).length
   )
-  const sellerProfile = computed(() => userProfile.value?.sellerProfile || null)
+  
+  const inactiveSellerCount = computed(() => 
+    sellerProfiles.value.filter(s => !s.is_active).length
+  )
+
+  const activeSellers = computed(() => 
+    sellerProfiles.value.filter(s => s.is_active)
+  )
+
+  const inactiveSellers = computed(() => 
+    sellerProfiles.value.filter(s => !s.is_active)
+  )
+
+  const isSeller = computed(() => hasSellers.value)
+  
+  const isVerifiedSeller = computed(() => 
+    activeSellers.value.some(s => s.is_verified)
+  )
+
+  const primarySeller = computed(() => 
+    activeSellers.value[0] || null
+  )
 
   // ========== ACTIONS ==========
 
- async function login(credentials: ILoginCredentials) {
-  const authApi = useAuthApi()
-  isLoading.value = true
-  error.value = null
+  async function login(credentials: ILoginCredentials) {
+    const authApi = useAuthApi()
+    isLoading.value = true
+    error.value = null
 
-  try {
-    const response = await authApi.login(credentials)
-    userProfile.value = response.user
-    notify({ type: 'success', text: 'Login successful!' })
-    return { success: true }
-  } catch (e: any) {
-    // 1. Extract the specific error code from the Nuxt Fetch Error
-    const errorCode = e.data?.code || e.response?._data?.code 
-    const errorMessage = e.data?.message || e.message
+    try {
+      const response = await authApi.login(credentials)
+      userProfile.value = response.user
+      
+      // Clear sellers on new login
+      sellerProfiles.value = []
+      
+      notify({ type: 'success', text: 'Login successful!' })
+      return { success: true }
+    } catch (e: any) {
+      const errorCode = e.data?.code || e.response?._data?.code 
+      const errorMessage = e.data?.message || e.message
 
-    error.value = errorMessage
-    
-    // 2. Return the error code so the composable can react to it
-    return { 
-      success: false, 
-      error: errorMessage, 
-      code: errorCode // <--- Pass this back to the caller(useAuth composable)
+      error.value = errorMessage
+      
+      return { 
+        success: false, 
+        error: errorMessage, 
+        code: errorCode
+      }
+    } finally {
+      isLoading.value = false
     }
-  } finally {
-    isLoading.value = false
   }
-}
 
   async function register(data: IRegisterData) {
     const authApi = useAuthApi()
@@ -77,7 +112,6 @@ export const useAuthStore = defineStore('auth', () => {
     error.value = null
 
     try {
-      // API client validates with Zod
       const response = await authApi.register(data)
 
       notify({
@@ -119,52 +153,55 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-// In your auth.store.ts - replace the fetchUserProfile method with this:
-
-async function fetchUserProfile() {
-  console.log('🔴 fetchUserProfile CALLED!')
-  console.trace('🔴 STACK TRACE - Who called me?')
-  const supabaseUser = useSupabaseUser()
-  
-  // Don't attempt if no Supabase user
-  if (!supabaseUser.value) {
-    userProfile.value = null
-    return
-  }
-
-  const authApi = useAuthApi()
-  isLoading.value = true
-  error.value = null
-
-  try {
-    const response = await authApi.getProfile()
-
-    // Validate response with Zod
-    const validated = safeUserSchema.parse(response.user)
-    userProfile.value = validated
-    
-    // Clear any previous errors
+  async function fetchUserProfile() {
+    const authApi = useAuthApi()
+    isLoading.value = true
     error.value = null
-  } catch (e: any) {
-    // ❌ If 401, the session is invalid - clear it
-    if (e.statusCode === 401 || e.response?.status === 401) {
-      console.warn('Session is invalid (401), clearing auth state')
-      userProfile.value = null
-      error.value = null
-      return
-    }
 
-    // ⚠️  Other errors - log but don't fail the app
-    error.value = e.message
-    console.error('Failed to fetch user profile:', {
-      message: e.message,
-      status: e.statusCode || e.response?.status,
-      endpoint: '/api/auth/profile'
-    })
-  } finally {
-    isLoading.value = false
+    try {
+      const response = await authApi.getProfile()
+      const validated = safeUserSchema.parse(response.user)
+      userProfile.value = validated
+      error.value = null
+    } catch (e: any) {
+      if (e.statusCode === 401 || e.response?.status === 401) {
+        console.warn('Session is invalid (401), clearing auth state')
+        userProfile.value = null
+        sellerProfiles.value = []
+        error.value = null
+        return
+      }
+
+      error.value = e.message
+      console.error('Failed to fetch user profile:', {
+        message: e.message,
+        status: e.statusCode || e.response?.status,
+        endpoint: '/api/auth/profile'
+      })
+    } finally {
+      isLoading.value = false
+    }
   }
-}
+
+  // ========== SELLER ACTIONS ==========
+
+  async function fetchSellerProfiles() {
+    const authApi = useAuthApi()
+    isLoading.value = true
+    error.value = null
+
+    try {
+      const response = await authApi.getSellerProfiles()
+      sellerProfiles.value = response.sellers || []
+      error.value = null
+    } catch (e: any) {
+      error.value = e.message
+      console.error('Failed to fetch seller profiles:', e.message)
+      sellerProfiles.value = []
+    } finally {
+      isLoading.value = false
+    }
+  }
 
   async function createSellerProfile(data: Partial<ISafeSellerProfile>) {
     const authApi = useAuthApi()
@@ -173,15 +210,67 @@ async function fetchUserProfile() {
 
     try {
       const response = await authApi.createSellerProfile(data)
-      userProfile.value = response.user
+      
+      // Add new seller to array
+      sellerProfiles.value.push(response.seller)
 
       notify({ type: 'success', text: 'Seller profile created successfully!' })
-      return true
+      return { success: true, seller: response.seller }
     } catch (e: any) {
       error.value = e.message
-      notify({ type: 'error', text: 'Failed to create seller profile' })
+      notify({ type: 'error', text: e.message || 'Failed to create seller profile' })
       console.error('Failed to create seller profile:', e)
-      return false
+      return { success: false, error: e.message }
+    } finally {
+      isLoading.value = false
+    }
+  }
+
+  async function deactivateSellerProfile(sellerId: string) {
+    const authApi = useAuthApi()
+    isLoading.value = true
+    error.value = null
+
+    try {
+      await authApi.deactivateSellerProfile(sellerId)
+      
+      // Update seller in array
+      const index = sellerProfiles.value.findIndex(s => s.id === sellerId)
+      if (index !== -1 && sellerProfiles.value[index]) {
+        sellerProfiles.value[index].is_active = false
+      }
+
+      notify({ type: 'success', text: 'Seller profile deactivated' })
+      return { success: true }
+    } catch (e: any) {
+      error.value = e.message
+      notify({ type: 'error', text: e.message || 'Failed to deactivate seller profile' })
+      return { success: false, error: e.message }
+    } finally {
+      isLoading.value = false
+    }
+  }
+
+  async function activateSellerProfile(sellerId: string) {
+    const authApi = useAuthApi()
+    isLoading.value = true
+    error.value = null
+
+    try {
+      await authApi.activateSellerProfile(sellerId)
+      
+      // Update seller in array
+      const index = sellerProfiles.value.findIndex(s => s.id === sellerId)
+      if (index !== -1 && sellerProfiles.value[index]) {
+        sellerProfiles.value[index].is_active = true
+      }
+
+      notify({ type: 'success', text: 'Seller profile reactivated' })
+      return { success: true }
+    } catch (e: any) {
+      error.value = e.message
+      notify({ type: 'error', text: e.message || 'Failed to activate seller profile' })
+      return { success: false, error: e.message }
     } finally {
       isLoading.value = false
     }
@@ -190,14 +279,13 @@ async function fetchUserProfile() {
   async function getSellerBySlug(slug: string) {
     if (!slug) return null
 
-    if (sellerCache.value[slug]) {
-      return sellerCache.value[slug]
-    }
+    // Check local cache first
+    const cached = sellerProfiles.value.find(s => s.store_slug === slug)
+    if (cached) return cached
 
     const authApi = useAuthApi()
     try {
       const response = await authApi.getSellerBySlug(slug)
-      sellerCache.value[slug] = response.seller
       return response.seller
     } catch (e: any) {
       console.error(`Failed to fetch seller profile for ${slug}:`, e)
@@ -213,7 +301,7 @@ async function fetchUserProfile() {
       await authApi.logout()
 
       userProfile.value = null
-      sellerCache.value = {}
+      sellerProfiles.value = []
       error.value = null
 
       notify({ type: 'success', text: 'Logged out successfully' })
@@ -232,30 +320,48 @@ async function fetchUserProfile() {
 
   function reset() {
     userProfile.value = null
-    sellerCache.value = {}
+    sellerProfiles.value = []
     isLoading.value = false
     error.value = null
   }
 
-  
   return {
+    // State
     userProfile,
-    sellerCache,
+    sellerProfiles,
     isLoading,
     error,
+    
+    // User Getters
     isLoggedIn,
     isAuthenticated,
     user,
+
+    // Seller Getters
+    hasSellers,
+    activeSellerCount,
+    inactiveSellerCount,
+    activeSellers,
+    inactiveSellers,
     isSeller,
     isVerifiedSeller,
-    sellerProfile,
+    primarySeller,
+
+    // User Actions
     login,
     register,
     loginWithOAuth,
     fetchUserProfile,
-    createSellerProfile,
-    getSellerBySlug,
     logout,
+
+    // Seller Actions
+    fetchSellerProfiles,
+    createSellerProfile,
+    deactivateSellerProfile,
+    activateSellerProfile,
+    getSellerBySlug,
+
+    // Utilities
     clearError,
     reset,
   }
