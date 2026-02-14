@@ -3,11 +3,13 @@ export default defineNuxtConfig({
   compatibilityDate: '2025-07-15',
   devtools: { enabled: true },
   extends: [
-    './layers/auth',     // ← this makes auth server routes available
+    './layers/AI',     // ← this makes auth server routes available
     './layers/base',
-    './layers/social',
-    './layers/marketplace',
+    './layers/feed',
+    './layers/seller',
+    './layers/profile',
     './layers/commerce',
+    './layers/post',
     // ... other layers
   ],
   modules: [
@@ -19,10 +21,15 @@ export default defineNuxtConfig({
     '@nuxtjs/tailwindcss',
     '@nuxtjs/color-mode',
     'pinia-plugin-persistedstate/nuxt',
+    '@nuxt/image'
   ],
-  imports: {
-    dirs: ['server/models', 'composables', 'utils', 'layers/auth'] // Add your layer-specific directories
+  image: {
+      provider: 'cloudinary',
+    cloudinary: {
+      baseURL: 'https://res.cloudinary.com/dcci05bzj'
+    }
   },
+
   nitro: {
      middleware: [
       'middleware/csrf-init.ts',  // ← Generate token FIRST

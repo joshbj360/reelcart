@@ -1,64 +1,50 @@
-// server/api/seller/[id]/activate.post.ts - UPDATED TO USE sellerRepository
-import { defineEventHandler, createError, type H3Event } from 'h3'
-import { requireAuth } from '../../../utils/auth/auth'
-import { logAuditEvent, AuditEventType } from '../../../utils/auth/auditLog'
-import { sellerRepository } from '~~/server/database/repositories/seller.repository'
+// FILE PATH: server/layers/seller/api/[id]/activate.post.ts
 
-export default defineEventHandler(async (event: H3Event) => {
+import { defineEventHandler } from 'h3'
+import { requireAuth } from '../../../layers/shared/middleware/requireAuth'
+import { sellerService } from '../../../layers/seller/services/seller.services'
+
+export default defineEventHandler(async (event) => {
   try {
+    // Verify authentication
     const user = await requireAuth(event)
-    const sellerId = event.context.params?.id
+
+    const sellerId = getRouterParam(event, 'id')
 
     if (!sellerId) {
       throw createError({
         statusCode: 400,
-        message: 'Seller ID is required',
+        statusMessage: 'Seller ID is required'
       })
     }
 
-    const seller = await sellerRepository.getSellerProfile(sellerId)
-
-    if (!seller) {
-      throw createError({
-        statusCode: 404,
-        message: 'Seller profile not found',
-      })
-    }
-
-    if (seller.profileId !== user.id) {
-      throw createError({
-        statusCode: 403,
-        message: 'You do not have permission to activate this seller profile',
-      })
-    }
-
-    const updatedSeller = await sellerRepository.activateSellerProfile(sellerId, user.id)
-
-    await logAuditEvent({
-      eventType: AuditEventType.SELLER_PROFILE_CREATED,
-      userId: user.id,
-      email: user.email,
-      success: true,
-      reason: 'Seller profile reactivated',
-      metadata: {
-        seller_id: sellerId,
-        store_name: seller.store_name,
-        store_slug: seller.store_slug,
-      }
-    })
+    // Activate seller profile
+    const seller = await sellerService.activateSellerProfile(sellerId, user.id)
 
     return {
       success: true,
-      message: 'Seller profile reactivated successfully',
-      seller_id: sellerId,
-      is_active: updatedSeller.is_active,
+      message: 'Seller profile activated successfully',
+      data: seller
     }
-  } catch (error: any) {
-    console.error('Activate seller profile error:', error)
-    if (error.statusCode) throw error
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('SellerError')) {
+      const sellerError = error as any
+      throw createError({
+        statusCode: sellerError.statusCode || 400,
+        statusMessage: error.message
+      })
+    }
+
+    if (error instanceof Error && error.message.includes('Unauthorized')) {
+      throw createError({
+        statusCode: 403,
+        statusMessage: error.message
+      })
+    }
+
     throw createError({
       statusCode: 500,
-      statusMessage: error.message || 'Failed to activate seller profile'
+      statusMessage: 'Failed to activate seller profile'
     })
   }
 })

@@ -1,4 +1,5 @@
-import { EMediaType, type IMedia } from "~/models";
+import { type MediaModel,  } from "~~/prisma/generated/models";
+
 
 const formatPrice = (price: number) => new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN' }).format(price / 100);
 const formatNumber = (num: number) => new Intl.NumberFormat().format(num);
@@ -9,14 +10,14 @@ const formatNumber = (num: number) => new Intl.NumberFormat().format(num);
  * @param media The media object from your database.
  * @returns A URL for a static image thumbnail.
  */
- const getMediaThumbnailUrl = (media?: IMedia): string => {
+ const getMediaThumbnailUrl = (media?: MediaModel): string => {
     if (!media || !media.url) {
         return '/assets/images/men.png'; // A fallback image
     }
 
     // If the media is a video, change the extension to .jpg
     // Cloudinary will automatically generate a thumbnail from the video.
-    if (media.type === EMediaType.VIDEO) {
+    if (media.type === 'VIDEO') {
         const urlParts = media.url.split('.');
         urlParts.pop(); // Remove the original extension (e.g., .mp4)
         return `${urlParts.join('.')}.jpg`;

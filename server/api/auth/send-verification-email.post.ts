@@ -1,40 +1,52 @@
-// server/api/auth/send-verification-email.post.ts
-/**
- * Send verification email endpoint
- * 
- * POST /api/auth/send-verification-email
- * Body: { email: string, token: string }
- */
+// FILE PATH: server/layers/auth/api/send-verification-email.post.ts
 
-import { sendVerificationEmail } from '../../utils/email/emailService'
+import { defineEventHandler, readBody } from 'h3'
+import { requireAuth } from '../../layers/shared/middleware/requireAuth'
+import { authService } from '../../layers/auth/services/auth.service'
 
 export default defineEventHandler(async (event) => {
-  const { email, token } = await readBody(event)
-
-  // Validate input
-  if (!email || !token) {
-    throw createError({
-      statusCode: 400,
-      statusMessage: 'Email and token are required',
-    })
-  }
-
   try {
-    const config = useRuntimeConfig()
-    const appUrl = process.env.APP_URL || 'http://localhost:3000'
+    // Get authenticated user
+    const user = await requireAuth(event)
 
-    const result = await sendVerificationEmail(email, token, appUrl)
+    // Get user email
+    const profile = await prisma.profile.findUnique({
+      where: { id: user.id },
+      select: { email: true }
+    })
+
+    if (!profile) {
+      throw createError({
+        statusCode: 404,
+        statusMessage: 'User not found'
+      })
+    }
+
+    // Send verification email
+    const result = await authService.sendVerificationEmail(user.id, profile.email)
 
     return {
       success: true,
-      message: 'Verification email sent',
-      emailId: result.id,
+      message: result.message
     }
-  } catch (error: any) {
-    console.error('Failed to send verification email:', error)
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('Unauthorized')) {
+      throw createError({
+        statusCode: 401,
+        statusMessage: error.message
+      })
+    }
+
+    if (error instanceof Error && error.message.includes('RATE_LIMIT_EXCEEDED')) {
+      throw createError({
+        statusCode: 429,
+        statusMessage: error.message
+      })
+    }
+
     throw createError({
       statusCode: 500,
-      statusMessage: 'Failed to send verification email',
+      statusMessage: 'Failed to send verification email'
     })
   }
 })

@@ -1,65 +1,51 @@
-// server/api/seller/register.post.ts - UPDATED TO USE sellerRepository
-import { z } from 'zod'
-import { requireAuth } from '../../utils/auth/auth'
-import { sellerRepository } from '../../database/repositories/seller.repository'
-import { defineEventHandler, readBody, createError, type H3Event } from 'h3'
-import { logAuditEvent, AuditEventType } from '../../utils/auth/auditLog'
+// FILE PATH: server/layers/seller/api/register.post.ts
 
-const createSellerSchema = z.object({
-  store_name: z.string().min(3, 'Store name must be at least 3 characters').max(100),
-  store_slug: z.string()
-    .min(3, 'Store slug must be at least 3 characters')
-    .max(50)
-    .regex(/^[a-z0-9-]+$/, 'Store slug can only contain lowercase letters, numbers, and hyphens'),
-  store_description: z.string().max(500).optional(),
-  store_logo: z.string().url().optional(),
-  store_banner: z.string().url().optional(),
-})
+import { defineEventHandler, readBody } from 'h3'
+import { createSellerProfileSchema } from '../../layers/seller/schemas/seller.schema'
+import { requireAuth } from '../../layers/shared/middleware/requireAuth'
+import { ZodError } from 'zod'
+import { sellerService } from '../../layers/seller/services/seller.services'
 
-export default defineEventHandler(async (event: H3Event) => {
+export default defineEventHandler(async (event) => {
   try {
+    // Verify authentication
     const user = await requireAuth(event)
+
+    // Parse and validate request body
     const body = await readBody(event)
-    const validation = createSellerSchema.safeParse(body)
-
-    if (!validation.success) {
-      throw createError({
-        statusCode: 400,
-        message: validation.error.errors[0].message,
-      })
-    }
-
-    // Check if slug is already taken
-    const isSlugTaken = await sellerRepository.isStoreSlugTaken(validation.data.store_slug)
-    if (isSlugTaken) {
-      throw createError({
-        statusCode: 409,
-        message: 'Store slug already exists. Please choose a different one.',
-      })
-    }
-
-    const sellerProfile = await sellerRepository.createSellerProfile(user.id, validation.data)
-
-    await logAuditEvent({
-      eventType: AuditEventType.SELLER_PROFILE_CREATED,
-      userId: user.id,
-      email: user.email,
-      success: true,
-      metadata: {
-        store_name: validation.data.store_name,
-        store_slug: validation.data.store_slug,
-        seller_id: sellerProfile.id,
-      }
-    })
+    const validatedData = createSellerProfileSchema.parse(body)
+    // Create seller profile
+    const seller = await sellerService.createSellerProfile(user.id, validatedData)
 
     return {
       success: true,
-      seller: sellerProfile,
       message: 'Seller profile created successfully',
+      data: seller
     }
-  } catch (error: any) {
-    console.error('Create seller profile error:', error)
-    if (error.statusCode) throw error
+  } catch (error) {
+    if (error instanceof ZodError) {
+      throw createError({
+        statusCode: 400,
+        statusMessage: 'Validation Error',
+        data: error.errors
+      })
+    }
+
+    if (error instanceof Error && error.message.includes('SellerError')) {
+      const sellerError = error as any
+      throw createError({
+        statusCode: sellerError.statusCode || 400,
+        statusMessage: error.message
+      })
+    }
+
+    if (error instanceof Error && error.message.includes('Unauthorized')) {
+      throw createError({
+        statusCode: 401,
+        statusMessage: error.message
+      })
+    }
+
     throw createError({
       statusCode: 500,
       statusMessage: 'Failed to create seller profile'
