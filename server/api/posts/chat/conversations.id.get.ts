@@ -10,7 +10,7 @@ export default defineEventHandler(async (event) => {
     const id = getRouterParam(event, 'id')
 if (!id) throw new UserError('INVALID_ID', 'ID is required', 400)
     
-    const result = await chatService.getConversation(id, user.userId)
+    const result = await chatService.getConversation(id, user.id)
     return { success: true, data: result }
   } catch (error: any) {
     if (error instanceof UserError) {

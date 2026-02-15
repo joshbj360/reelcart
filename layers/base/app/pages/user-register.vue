@@ -60,7 +60,7 @@
           <input
             v-model="form.password"
             :type="showPassword ? 'text' : 'password'"
-            placeholder="Password (min 8 characters)"
+            placeholder="Password (min 12 characters)"
             :disabled="isLoading"
             :class="[
               'w-full px-4 py-3 pr-12 rounded-xl border bg-transparent placeholder-gray-400 focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all text-sm',
@@ -270,8 +270,8 @@ const validateForm = () => {
     return false
   }
 
-  if (form.password.length < 8) {
-    errors.password = 'Password must be at least 8 characters'
+  if (form.password.length < 12) {
+    errors.password = 'Password must be at least 12 characters'
     return false
   }
 

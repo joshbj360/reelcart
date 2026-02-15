@@ -1,4 +1,4 @@
-import { type MediaModel,  } from "~~/prisma/generated/models";
+import type { Media as MediaModel } from "@prisma/client";
 
 
 const formatPrice = (price: number) => new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN' }).format(price / 100);

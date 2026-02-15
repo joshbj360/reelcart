@@ -3,19 +3,19 @@ import type { IComment, ICreateCommentData, IPaginatedResponse } from '../../../
 
 export class CommentApiClient extends BaseApiClient {
   async getPostComments(postId: string, limit: number = 20, offset: number = 0): Promise<IPaginatedResponse<IComment>> {
-    return this.request(`/api/user/posts/${postId}/comments?limit=${limit}&offset=${offset}`, { method: 'GET' })
+    return this.request(`/api/posts/${postId}/comments?limit=${limit}&offset=${offset}`, { method: 'GET' })
   }
   
   async createComment(postId: string, data: ICreateCommentData): Promise<IComment> {
-    return this.request(`/api/user/posts/${postId}/comments`, { method: 'POST', body: data })
+    return this.request(`/api/posts/${postId}/comments`, { method: 'POST', body: data })
   }
   
   async deleteComment(postId: string, commentId: string): Promise<any> {
-    return this.request(`/api/user/posts/${postId}/comments/${commentId}`, { method: 'DELETE' })
+    return this.request(`/api/posts/${postId}/comments/${commentId}`, { method: 'DELETE' })
   }
   
   async likeComment(postId: string, commentId: string): Promise<any> {
-    return this.request(`/api/user/posts/${postId}/comments/${commentId}/like`, { method: 'POST' })
+    return this.request(`/api/posts/${postId}/comments/${commentId}/like`, { method: 'POST' })
   }
 }
 

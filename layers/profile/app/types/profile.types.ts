@@ -1,6 +1,6 @@
 
 //Location:** `~/layers/profile/app/types/profile.types.ts`
-import type { ProfileModel } from '../../../../prisma/generated/models'
+import type { Profile as ProfileModel } from '@prisma/client'
 export interface IProfile extends ProfileModel {
   stateOfResidence?: string
   fullAddress?: string,

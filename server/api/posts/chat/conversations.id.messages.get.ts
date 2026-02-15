@@ -13,7 +13,7 @@ if (!id) throw new UserError('INVALID_ID', 'ID is required', 400)
     const limit = Math.min(Math.max(Number(query.limit) || 50, 1), 100)
     const offset = Math.max(Number(query.offset) || 0, 0)
     
-    const result = await chatService.getConversationMessages(id, user.userId, limit, offset)
+    const result = await chatService.getConversationMessages(id, user.id, limit, offset)
     return { success: true, data: result }
   } catch (error: any) {
     if (error instanceof UserError) {

@@ -11,6 +11,7 @@ import { hashPassword, verifyPassword, generateTokens } from '../../../utils/aut
 import { checkRateLimit, clearRateLimit } from '../../../utils/auth/rateLimiter'
 import { RATE_LIMITS } from '../../../config/rateLimits'
 import { authRepository } from '../repositories/auth.repository'
+import { sendVerificationEmail as sendVerifyEmail, sendPasswordResetEmail as sendResetEmail } from '../../../utils/email/emailService'
 
 export const authService = {
 
@@ -74,8 +75,13 @@ export const authService = {
       }
     })
 
-    // 4. Create email verification token and audit log
-    await authRepository.createEmailVerificationToken(user.id)
+    // 4. Create email verification token, send email, and audit log
+    const verificationToken = await authRepository.createEmailVerificationToken(user.id)
+    const config = useRuntimeConfig()
+    const appUrl = (config.public.baseURL as string) || 'http://localhost:3000'
+    await sendVerifyEmail(email, verificationToken, appUrl).catch((err) => {
+      console.error('Failed to send verification email:', err.message)
+    })
 
     await authRepository.createAuditLog({
       userId: user.id,
@@ -280,11 +286,11 @@ export const authService = {
       )
     }
 
-    // Create verification token
+    // Create verification token and send email
     const token = await authRepository.createEmailVerificationToken(userId)
-    
-    // TODO: Send email with verification link
-    // await emailService.sendVerificationEmail(email, token)
+    const config = useRuntimeConfig()
+    const appUrl = (config.public.baseURL as string) || 'http://localhost:3000'
+    await sendVerifyEmail(email, token, appUrl)
 
     return { message: 'Verification email sent' }
   },
@@ -373,8 +379,12 @@ export const authService = {
       success: true
     })
 
-    // TODO: Send email with reset link
-    // await emailService.sendPasswordResetEmail(email, token)
+    // Send reset email
+    const config = useRuntimeConfig()
+    const appUrl = (config.public.baseURL as string) || 'http://localhost:3000'
+    await sendResetEmail(email, token, appUrl).catch((err) => {
+      console.error('Failed to send password reset email:', err.message)
+    })
 
     return { message: 'If email exists, reset link will be sent' }
   },

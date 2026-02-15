@@ -1,6 +1,6 @@
 
 import type { IPaginationMeta, IProfile } from '../../../../layers/profile/app/types/profile.types';
-import type { ProductsModel, PostModel } from '../../../../prisma/generated/models'
+import type { Products as ProductsModel, Post as PostModel } from '@prisma/client'
 export interface IPost extends PostModel {
 
     author?: IProfile

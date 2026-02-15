@@ -31,14 +31,8 @@ export default defineNuxtConfig({
   },
 
   nitro: {
-     middleware: [
-      'middleware/csrf-init.ts',  // ← Generate token FIRST
-      'middleware/security.ts',
-      'middleware/csrf.ts',       // ← Validate CSRF
-      'middleware/rateLimiter.ts',
-    ],
      plugins: [
-       'plugins/monitoring',        // ADD
+       'plugins/monitoring',
      ],
    },
   colorMode: {

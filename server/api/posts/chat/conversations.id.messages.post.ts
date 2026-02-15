@@ -16,7 +16,7 @@ if (!id) throw new UserError('INVALID_ID', 'ID is required', 400)
     
     const result = await chatService.sendMessage(
       id,
-      user.userId,
+      user.id,
       body.text,
       body.type,
       ipAddress,

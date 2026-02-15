@@ -149,12 +149,8 @@ import HomepageSkeleton from '~/components/home/HomePageSkeleton.vue';
 
 import PostCard from '../../layers/post/app/components/PostCard.vue'
 import RightSideNav from '~/layouts/children/RightSideNav.vue';
-// import ProductCommentModal from '~/components/chat/ProductCommentModal.vue';
-// import PostCommentModal from '~/components/chat/PostCommentModal.vue';
-// import ProductDetailModal from '~/components/home/ProductDetailModal.vue';
-// import PostDetailModal from '~/components/post/PostDetailModal.vue';
-// import StoryUploadModal from '~/components/stories/StoryModal.vue';
 import { useFeedApi } from '../../layers/feed/app/services/feed.api';
+import { getMediaThumbnailUrl } from '../../layers/base/app/utils/formatters';
 import type { IFeedItem } from '../../layers/feed/app/types/feed.types';
 import type { IProduct } from '../../layers/post/app/types/post.types';
 
@@ -228,7 +224,7 @@ const { data: pageData, pending, error, refresh } = await useLazyAsyncData(
 );
 
 // 3. Use computed properties for reactive data
-//const stories = computed(() => storyStore.homepageStories || []);
+const stories = ref<any[]>([])
 const mainFeed = computed(() => feedStore.mainFeed || []);
 //const categories = computed(() => categoryStore.categories || []);
 

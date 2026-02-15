@@ -4,8 +4,6 @@ import { authService } from '../../layers/auth/services/auth.service'
 import { loginSchema } from '../../layers/auth/schemas/auth.schemas'
 
 export default defineEventHandler(async (event) => {
-  console.error('🔍 REQUIRE_EMAIL_VERIFICATION:', process.env.REQUIRE_EMAIL_VERIFICATION) // TODO: remove
-  console.error('🔍 NODE_ENV:', process.env.NODE_ENV) // TODO: remove
   try {
     // 1. Parse and validate request body
     const body = await readBody(event)
@@ -75,7 +73,7 @@ export default defineEventHandler(async (event) => {
     console.error('[Login API] Error:', error)
     throw createError({
       statusCode: 500,
-      statusMessage: 'Internal server error' + error //TODO: remove
+      statusMessage: 'Internal server error'
     })
   }
 })

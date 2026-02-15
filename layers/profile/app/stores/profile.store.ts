@@ -58,7 +58,6 @@ export const useProfileStore = defineStore('profile', () => {
    * Set profile stats - SINGLE SOURCE OF TRUTH
    */
   const setProfileStats = (username: string, stats: IProfileStats) => {
-    console.log('LOGGING STATS...' + JSON.stringify(stats))
     profileStats.value.set(username, stats)
   }
 

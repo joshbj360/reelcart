@@ -14,7 +14,7 @@ export default defineEventHandler(async (event) => {
     const userAgent = getHeader(event, 'user-agent') || 'unknown'
     
     const result = await chatService.createConversation(
-      user.userId,
+      user.id,
       body.targetId,
       body.productId,
       ipAddress,

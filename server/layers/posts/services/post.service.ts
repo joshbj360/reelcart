@@ -247,13 +247,6 @@ export const contentService = {
 
     await notificationService.createNotification({
       userId: post.authorId,
-      type: 'POST_COMMENT',
-      actorId: userId,
-      postId: postId,
-      message: `Someone commented on your post`
-    })
-    await notificationService.createNotification({
-      userId: post.authorId,
       type: 'POST_LIKE',
       actorId: userId,
       postId: postId,

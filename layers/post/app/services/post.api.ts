@@ -37,7 +37,7 @@ export class PostApiClient extends BaseApiClient {
   }
 
   async savePost(id: string): Promise<any> {
-    return this.request(`/api/posts/save`, { method: 'POST' })
+    return this.request(`/api/posts/save`, { method: 'POST', body: { postId: id } })
   }
   
   async unsavePost(id: string): Promise<any> {  

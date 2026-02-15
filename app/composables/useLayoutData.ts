@@ -1,32 +1,23 @@
-
-
 /**
  * Fetch global layout data (top sellers, categories)
  * Cached across all pages
  */
 export const useLayoutData = () => {
-
-    
     return useLazyAsyncData(
         'layout-data',
         async () => {
             try {
-                // TODO: Replace with actual API calls
-                const [topSellers] = await Promise.all([
-                    // $fetch('/api/sellers/top'),
-                    Promise.resolve([]), // Placeholder
-                    //categoryStore.fetchCategories()
+                const [sellersResponse] = await Promise.all([
+                    $fetch('/api/seller/list', { method: 'GET' }).catch(() => ({ data: [] })),
                 ])
 
                 return {
-                    topSellers: topSellers || [],
-                   // categories: categoryStore.categories || []
+                    topSellers: (sellersResponse as any)?.data || [],
                 }
             } catch (error) {
                 console.error('Failed to fetch layout data:', error)
                 return {
                     topSellers: [],
-                    categories: []
                 }
             }
         },
@@ -35,7 +26,6 @@ export const useLayoutData = () => {
             lazy: true,
             default: () => ({
                 topSellers: [],
-                categories: []
             })
         }
     )

@@ -13,7 +13,7 @@ if (!id) throw new UserError('INVALID_ID', 'ID is required', 400)
     const ipAddress = getHeader(event, 'x-forwarded-for') || getClientIP(event) || 'unknown'
     const userAgent = getHeader(event, 'user-agent') || 'unknown'
     
-    const result = await chatService.deleteConversation(id, user.userId, ipAddress, userAgent)
+    const result = await chatService.deleteConversation(id, user.id, ipAddress, userAgent)
     return { success: true, data: result }
   } catch (error: any) {
     if (error instanceof UserError) {

@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { enhancedPasswordSchema } from '../../../utils/auth/passwordValidator'
 
 // ==================== LOGIN ====================
 // Login validation is lighter; we just need to know if they provided a string.

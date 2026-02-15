@@ -4,6 +4,7 @@ export const usePostStore = defineStore('post', () => {
   const posts = ref<Map<string, any>>(new Map()) // Master record of all posts
   const userPosts = ref<Map<string, string[]>>(new Map()) // { 'testuser': ['id1', 'id2'] }
   const savedPostIds = ref<string[]>([])
+  const likedPostIds = ref<Set<string>>(new Set())
   const isLoading = ref(false)
   const error = ref<string | null>(null)
 
@@ -52,10 +53,16 @@ export const usePostStore = defineStore('post', () => {
     savedPostIds.value = savedPostIds.value.filter(id => id !== postId)
   }
 
-  return { 
-    posts, userPosts, isLoading, error, 
-    getPostById, getPostsByUsername, 
-    addPosts, deletePost, 
+  // Liked posts
+  const isPostLiked = (postId: string) => likedPostIds.value.has(postId)
+  const setLikedPosts = (ids: string[]) => { likedPostIds.value = new Set(ids) }
+  const addLikedPost = (postId: string) => { likedPostIds.value.add(postId) }
+  const removeLikedPost = (postId: string) => { likedPostIds.value.delete(postId) }
+
+  return {
+    posts, userPosts, isLoading, error,
+    getPostById, getPostsByUsername,
+    addPosts, deletePost,
     setLoading: (val: boolean) => isLoading.value = val,
     setError: (val: string | null) => error.value = val,
 
@@ -63,6 +70,12 @@ export const usePostStore = defineStore('post', () => {
     mySavedPosts,
     setSavedPosts,
     addSavedPosts,
-    removeSavedPost
+    removeSavedPost,
+
+    likedPostIds,
+    isPostLiked,
+    setLikedPosts,
+    addLikedPost,
+    removeLikedPost
   }
 })

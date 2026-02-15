@@ -1,6 +1,6 @@
 // FILE PATH: layers/seller/app/services/seller.api.ts
 
-import { BaseApiClient } from "~~/layers/base/app/services/api/base.api"
+import { BaseApiClient } from "~~/layers/base/app/services/base.api"
 
 
 /**

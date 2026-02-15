@@ -1,5 +1,5 @@
 import { defineStore } from "pinia";
-import  {type MediaModel } from "~~/prisma/generated/models";
+import type { Media as MediaModel } from "@prisma/client";
 
 export const useCoreStore = defineStore("core", {
   state: () => ({

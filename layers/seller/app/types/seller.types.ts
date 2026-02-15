@@ -1,5 +1,5 @@
 import type { IProfile } from "~~/layers/profile/app/types/profile.types";
-import type { SellerProfileModel } from "~~/prisma/generated/models";
+import type { SellerProfile as SellerProfileModel } from "@prisma/client";
 
 export interface ISellerProfile extends SellerProfileModel {
     profile ?: IProfile
