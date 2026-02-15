@@ -1,6 +1,5 @@
 // layers/user/app/stores/profile.store.ts
 
-import { JsonNull } from "@prisma/client/runtime/client"
 import type { IProfile, IProfileStats } from "../types/profile.types"
 
 export const useProfileStore = defineStore('profile', () => {
