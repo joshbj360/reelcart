@@ -1,122 +1,59 @@
-// server/api/auth/refresh-token.post.ts
-/**
- * Refresh authentication token
- * POST /api/auth/refresh-token
- * 
- * Request body:
- * {
- *   refresh_token: string
- * }
- * 
- * Response:
- * {
- *   success: boolean
- *   access_token: string
- *   refresh_token: string
- *   expires_in: number
- *   user: SafeUser
- * }
- */
+import { defineEventHandler, getCookie, setCookie, createError, getRequestIP, getRequestHeader } from 'h3'
+import { ZodError } from 'zod'
+import { authService } from '../../layers/auth/services/auth.service'
 
-import { serverSupabaseClient } from '#supabase/server'
-import { logAuditEvent, AuditEventType } from '../../utils/auth/auditLog'
-import { getClientIp, getUserAgent } from '../../utils/security/errors'
-
-export default defineEventHandler(async (event: H3Event) => {
-  const ipAddress = getClientIp(event.node.req)
-  const userAgent = getUserAgent(event.node.req)
-
+export default defineEventHandler(async (event) => {
   try {
-    const { refresh_token } = await readBody(event)
+    // 1. Get Refresh Token (Safely from HTTP-Only Cookie)
+    const refreshToken = getCookie(event, 'refreshToken')
 
-    if (!refresh_token || typeof refresh_token !== 'string') {
-      throw createError({
-        statusCode: 400,
-        message: 'Refresh token is required',
-      })
-    }
-
-    // Get Supabase client
-    const client = await serverSupabaseClient(event)
-
-    // Exchange refresh token for new access token
-    const { data, error } = await client.auth.refreshSession({
-      refresh_token,
-    })
-
-    if (error || !data.session) {
-      await logAuditEvent({
-        eventType: AuditEventType.LOGIN_FAILED,
-        ipAddress,
-        userAgent,
-        success: false,
-        reason: 'Invalid or expired refresh token',
-      })
-
+    if (!refreshToken) {
       throw createError({
         statusCode: 401,
-        message: 'Invalid or expired refresh token. Please login again.',
+        statusMessage: 'No refresh token provided'
       })
     }
 
-    // Get user profile
-    const profile = await prisma.profile.findUnique({
-      where: { id: data.user!.id },
-      include: {
-        sellerProfile: true,
-      },
-    })
+    // 2. Get Client Context
+    const ipAddress = getRequestIP(event, { xForwardedFor: true }) || '127.0.0.1'
+    const userAgent = getRequestHeader(event, 'user-agent') || 'Unknown'
 
-    // Sanitize user data
-    const safeUser = {
-      id: data.user!.id,
-      email: data.user!.email,
-      username: profile?.username || data.user!.user_metadata?.username || data.user!.email?.split('@')[0],
-      avatar: profile?.avatar || null,
-      role: profile?.role || 'user',
-      created_at: profile?.created_at,
-      sellerProfile: profile?.sellerProfile || null,
-    }
-
-    // Log successful token refresh
-    await logAuditEvent({
-      eventType: AuditEventType.LOGIN_SUCCESS,
-      userId: data.user!.id,
-      email: data.user!.email,
+    // 3. Call Singleton Service
+    // Logic: Validate Token -> Check Expiry/Revocation -> Generate New Access Token -> Audit Log
+    const result = await authService.refreshAccessToken(
+      refreshToken,
       ipAddress,
-      userAgent,
-      success: true,
-      reason: 'Token refreshed',
+      userAgent
+    )
+
+    // 4. Set New Access Token Cookie
+    // We only refresh the short-lived access token here
+    setCookie(event, 'accessToken', result.accessToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 15 * 60 // 15 minutes
     })
 
     return {
       success: true,
-      access_token: data.session.access_token,
-      refresh_token: data.session.refresh_token,
-      expires_in: data.session.expires_in,
-      user: safeUser,
+      accessToken: result.accessToken
     }
+
   } catch (error: any) {
-    if (error.statusCode && error.statusCode < 500) {
-      throw error
+    // Handle Service Errors (e.g. "Token Expired", "Invalid Token")
+    if (error.statusCode) {
+      throw createError({
+        statusCode: error.statusCode,
+        statusMessage: error.message
+      })
     }
 
-    console.error('Refresh token endpoint error:', {
-      error: error.message,
-      ipAddress,
-    })
-
-    await logAuditEvent({
-      eventType: AuditEventType.LOGIN_FAILED,
-      ipAddress,
-      userAgent,
-      success: false,
-      reason: 'Unexpected error during token refresh',
-    })
-
+    // Handle Unexpected Errors
+    console.error('[Refresh Token API] Error:', error)
     throw createError({
       statusCode: 500,
-      message: 'An error occurred. Please try again later.',
+      statusMessage: 'Internal server error'
     })
   }
 })

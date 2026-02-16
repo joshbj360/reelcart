@@ -1,10 +1,12 @@
-// server/utils/auth/rateLimiter.ts
+// FILE PATH: server/utils/auth/rateLimiter.ts
+
 /**
  * Production-grade rate limiting for auth endpoints
  * Prevents brute force attacks and DoS
+ * 
+ * Returns allowed flag instead of throwing
+ * Service layer decides what to do with it
  */
-
-import { createError } from 'h3'
 
 interface RateLimitConfig {
   maxAttempts: number
@@ -17,6 +19,14 @@ interface AttemptRecord {
   count: number
   firstAttemptAt: number
   lockedUntil?: number
+}
+
+interface RateLimitResult {
+  allowed: boolean
+  remaining: number
+  resetAt: number
+  locked: boolean
+  lockedUntilMs?: number
 }
 
 // In-memory store for rate limiting (use Redis in production cluster)
@@ -32,59 +42,45 @@ setInterval(() => {
   }
 }, 3600000)
 
-export const rateLimitConfig = {
-  login: {
-    maxAttempts: 10,
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    lockoutMs: 30 * 60 * 1000, // 30 minutes lockout
-    keyPrefix: 'auth:login',
-  } as RateLimitConfig,
-
-  register: {
-    maxAttempts: 5,
-    windowMs: 60 * 60 * 1000, // 1 hour
-    lockoutMs: 60 * 60 * 1000, // 1 hour lockout
-    keyPrefix: 'auth:register',
-  } as RateLimitConfig,
-
-  profileFetch: {
-    maxAttempts: 30,
-    windowMs: 60 * 1000, // 1 minute
-    lockoutMs: 5 * 60 * 1000, // 5 minutes lockout
-    keyPrefix: 'auth:profile',
-  } as RateLimitConfig,
-}
-
 /**
  * Check rate limit for a key
- * Throws if rate limit exceeded
+ * Returns allowed: true/false (doesn't throw)
+ * Service layer decides what to do
  */
 export function checkRateLimit(
   identifier: string,
   config: RateLimitConfig
-): { remaining: number; resetAt: number } {
+): RateLimitResult {
   const key = `${config.keyPrefix}:${identifier}`
   const now = Date.now()
   let record = attemptStore.get(key)
 
-  // Check if account is locked
+  // ==================== CHECK LOCKED ====================
+  
   if (record?.lockedUntil && record.lockedUntil > now) {
-    const remaining = Math.ceil((record.lockedUntil - now) / 1000)
-    throw createError({
-      statusCode: 429,
-      message: `Too many attempts. Please try again in ${remaining} seconds.`,
-      data: { retryAfter: remaining },
-    })
+    const lockedUntilMs = record.lockedUntil - now
+    const remaining = Math.ceil(lockedUntilMs / 1000)
+    
+    return {
+      allowed: false,
+      remaining: 0,
+      resetAt: record.lockedUntil,
+      locked: true,
+      lockedUntilMs: remaining
+    }
   }
 
-  // Clear lock if expired
+  // ==================== CLEAR EXPIRED LOCK ====================
+  
   if (record?.lockedUntil && record.lockedUntil <= now) {
     record.lockedUntil = undefined
     record.count = 0
   }
 
-  // Initialize or update record
+  // ==================== INITIALIZE OR UPDATE ====================
+  
   if (!record) {
+    // First attempt
     record = {
       count: 1,
       firstAttemptAt: now,
@@ -96,35 +92,48 @@ export function checkRateLimit(
       firstAttemptAt: now,
     }
   } else {
+    // Within window, increment
     record.count++
   }
 
-  // Check if exceeded
+  // ==================== CHECK IF EXCEEDED ====================
+  
   if (record.count > config.maxAttempts) {
+    // Lock the account
     record.lockedUntil = now + config.lockoutMs
     attemptStore.set(key, record)
 
-    throw createError({
-      statusCode: 429,
-      message: 'Too many attempts. Account temporarily locked.',
-      data: {
-        retryAfter: Math.ceil(config.lockoutMs / 1000),
-      },
-    })
+    const lockedUntilMs = config.lockoutMs
+    const remaining = Math.ceil(lockedUntilMs / 1000)
+
+    return {
+      allowed: false,
+      remaining: 0,
+      resetAt: now + config.lockoutMs,
+      locked: true,
+      lockedUntilMs: remaining
+    }
   }
 
+  // ==================== ALLOWED ====================
+  
   attemptStore.set(key, record)
 
+  const remaining = config.maxAttempts - record.count
+  const resetAt = record.firstAttemptAt + config.windowMs
+
   return {
-    remaining: config.maxAttempts - record.count,
-    resetAt: record.firstAttemptAt + config.windowMs,
+    allowed: true,
+    remaining,
+    resetAt,
+    locked: false
   }
 }
 
 /**
  * Clear rate limit for a key (call on successful auth)
  */
-export function clearRateLimit(identifier: string, keyPrefix: string) {
+export function clearRateLimit(identifier: string, keyPrefix: string): void {
   const key = `${keyPrefix}:${identifier}`
   attemptStore.delete(key)
 }
@@ -132,7 +141,32 @@ export function clearRateLimit(identifier: string, keyPrefix: string) {
 /**
  * Get rate limit status for debugging
  */
-export function getRateLimitStatus(identifier: string, keyPrefix: string) {
+export function getRateLimitStatus(
+  identifier: string,
+  keyPrefix: string
+): AttemptRecord | undefined {
   const key = `${keyPrefix}:${identifier}`
   return attemptStore.get(key)
+}
+
+/**
+ * Reset all rate limits (for testing)
+ */
+export function resetAllRateLimits(): void {
+  attemptStore.clear()
+}
+
+/**
+ * Get all rate limit records (for monitoring/debugging)
+ */
+export function getAllRateLimitRecords(): Map<string, AttemptRecord> {
+  return new Map(attemptStore)
+}
+
+/**
+ * Delete specific rate limit record
+ */
+export function deleteRateLimitRecord(identifier: string, keyPrefix: string): boolean {
+  const key = `${keyPrefix}:${identifier}`
+  return attemptStore.delete(key)
 }

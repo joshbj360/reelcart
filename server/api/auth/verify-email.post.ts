@@ -1,77 +1,53 @@
-// server/api/auth/verify-email.post.ts
-/**
- * Verify Email Endpoint
- * 
- * POST /api/auth/verify-email
- * Body: { token: string }
- * 
- * Verifies email token and marks email as confirmed in Supabase
- */
+import { defineEventHandler, readBody, createError } from 'h3'
+import { ZodError } from 'zod'
+import { verifyEmailSchema } from '../../layers/auth/schemas/auth.schemas'
+import { authService } from '../../layers/auth/services/auth.service'
 
-import { serverSupabaseClient } from '#supabase/server'
-import { defineEventHandler, readBody, createError, type H3Event } from 'h3'
-import { authRepository } from '../../database/repositories/auth.repository'
-import { logAuditEvent, AuditEventType } from '../../utils/auth/auditLog'
-
-export default defineEventHandler(async (event: H3Event) => {
-  const { token } = await readBody(event)
-  
+export default defineEventHandler(async (event) => {
   try {
-    if (!token) {
+    // 1. Parse and validate request body
+    const body = await readBody(event)
+    const validation = verifyEmailSchema.safeParse(body)
+
+    if (!validation.success) {
       throw createError({
         statusCode: 400,
-        statusMessage: 'Token is required',
+        statusMessage: 'Validation Error',
+        data: validation.error.errors
       })
     }
 
-    // Validate token using repository
-    // Returns user_id if valid, null if invalid/expired/already-used
-    const userId = await authRepository.verifyEmailToken(token)
-
-    if (!userId) {
-      throw createError({
-        statusCode: 400,
-        statusMessage: 'Invalid, expired, or already used token',
-      })
-    }
-
-    // Mark email as confirmed in Supabase
-    const client = await serverSupabaseClient(event)
-    const { error: updateError } = await client.auth.admin.updateUserById(
-      userId,
-      { email_confirm: true }
-    )
-
-    if (updateError) {
-      throw createError({
-        statusCode: 500,
-        statusMessage: 'Failed to verify email',
-      })
-    }
-
-    // Log successful verification
-    await logAuditEvent({
-      eventType: AuditEventType.EMAIL_VERIFIED,
-      userId,
-      success: true,
-    })
+    // 2. Call Singleton Service
+    const result = await authService.verifyEmail(validation.data.token)
 
     return {
       success: true,
-      message: 'Email verified successfully!',
+      message: result.message
     }
+
   } catch (error: any) {
-    console.error('Email verification error:', error)
+    // Handle Zod Errors
+    if (error instanceof ZodError) {
+      throw createError({
+        statusCode: 400,
+        statusMessage: 'Validation Error',
+        data: error.errors
+      })
+    }
 
-    await logAuditEvent({
-      eventType: AuditEventType.REGISTER_FAILED,
-      success: false,
-      reason: error.message,
-    })
+    // Handle Service/Auth Errors (e.g. "Invalid Token")
+    if (error.statusCode) {
+      throw createError({
+        statusCode: error.statusCode,
+        statusMessage: error.message
+      })
+    }
 
+    // Handle Unexpected Errors
+    console.error('[Verify Email API] Error:', error)
     throw createError({
-      statusCode: error.statusCode || 500,
-      statusMessage: error.statusMessage || 'Email verification failed',
+      statusCode: 500,
+      statusMessage: 'Internal server error'
     })
   }
 })

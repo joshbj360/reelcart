@@ -1,39 +1,41 @@
-// server/api/auth/logout.post.ts
-/**
- * Logout Endpoint
- * 
- * POST /api/auth/logout
- * 
- * Revokes all sessions for the user (logout everywhere)
- */
+import { defineEventHandler, deleteCookie, getCookie, getRequestIP, getRequestHeader, createError } from 'h3'
+import { authService } from '../../layers/auth/services/auth.service'
+import { authRepository } from '../../layers/auth/repositories/auth.repository'
 
-import { defineEventHandler, createError, deleteCookie, type H3Event } from 'h3'
-import { requireAuth } from '~~/server/utils/auth/auth'
-import { sessionService } from '~~/server/services/session.service'
-
-export default defineEventHandler(async (event: H3Event) => {
+export default defineEventHandler(async (event) => {
   try {
-    // Authenticate user
-    const user = await requireAuth(event)
+    // 1. Get Client Info
+    const ipAddress = getRequestIP(event, { xForwardedFor: true }) || '127.0.0.1'
+    const userAgent = getRequestHeader(event, 'user-agent') || 'Unknown'
 
-    // Revoke all sessions (logout everywhere)
-    await sessionService.revokeAllSessions(user.id)
+    // 2. Get Refresh Token from Cookie
+    // This is safer than relying on a client-provided header
+    const refreshToken = getCookie(event, 'refreshToken')
 
-    // Clear refresh token cookie
-    deleteCookie(event, 'refresh_token')
+    if (refreshToken) {
+      // 3. Find the Session ID associated with this token
+      // We use the repo helper here to bridge the gap
+      const session = await authRepository.getSessionByRefreshToken(refreshToken)
+
+      if (session) {
+        // 4. Perform Logout (Revoke Session & Audit Log)
+        await authService.logout(session.id, ipAddress, userAgent)
+      }
+    }
+
+    // 5. Clear Cookies (Always do this, even if session lookup failed)
+    deleteCookie(event, 'accessToken')
+    deleteCookie(event, 'refreshToken')
 
     return {
       success: true,
       message: 'Logged out successfully'
     }
-  } catch (error: any) {
-    if (error.statusCode) {
-      throw error
-    }
-
+  } catch (error) {
+    console.error('[Logout API] Error:', error)
     throw createError({
       statusCode: 500,
-      statusMessage: 'Logout failed'
+      statusMessage: 'Internal server error'
     })
   }
 })

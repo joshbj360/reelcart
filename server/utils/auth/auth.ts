@@ -1,104 +1,78 @@
-// server/middleware/auth.ts
-/**
- * Auth Middleware
- * 
- * IMPORTANT: This middleware ONLY validates Supabase tokens
- * It does NOT use custom tokens - those are for tracking only
- * 
- * Flow:
- * 1. Extract Bearer token from Authorization header
- * 2. Validate with Supabase: serverSupabaseClient.auth.admin.getUser(token)
- * 3. Fetch full user profile from database
- * 4. Set event.context.user for downstream handlers
- */
+// FILE PATH: server/utils/auth/auth.ts
 
-import { defineEventHandler, createError, getHeader, type H3Event } from 'h3'
-import { userRepository } from '../../database/repositories/user.repository'
+import { hash, verify } from 'argon2'
+import jwt from 'jsonwebtoken'
 
-/**
- * Require authentication
- * Throws 401 if not authenticated
- */
-export async function requireAuth(event: H3Event) {
+const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production'
+const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'your-refresh-secret-change-in-production'
+
+// ==================== PASSWORD HASHING ====================
+
+export async function hashPassword(password: string): Promise<string> {
+  return await hash(password, {
+    type: 2, // argon2id
+    memoryCost: 19456,
+    timeCost: 2,
+    parallelism: 1
+  })
+}
+
+export async function verifyPassword(password: string, hash: string): Promise<boolean> {
   try {
-    // 1. Get auth header
-    const authHeader = getHeader(event, 'authorization')
-    
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      throw createError({
-        statusCode: 401,
-        statusMessage: 'Unauthorized - No token provided'
-      })
-    }
-
-    // 2. Extract token (remove "Bearer " prefix)
-    const token = authHeader.slice(7)
-
-    // 3. Verify token with Supabase admin API
-    const supabase = await serverSupabaseClient(event)
-    const { data, error } = await supabase.auth.getUser(token)
-
-    if (error || !data.user) {
-      throw createError({
-        statusCode: 401,
-        statusMessage: 'Unauthorized - Invalid token'
-      })
-    }
-
-    // 4. Fetch full user profile from database
-    const user = await userRepository.findByIdFull(data.user.id)
-
-    if (!user) {
-      throw createError({
-        statusCode: 401,
-        statusMessage: 'User not found'
-      })
-    }
-
-    // 5. Set user in event context for downstream handlers
-    event.context.user = {
-      id: user.id,
-      email: user.email,
-      username: user.username,
-      avatar: user.avatar,
-      role: user.role,
-      sellerProfile: user.sellerProfile || null,
-    }
-
-    return event.context.user
-  } catch (error: any) {
-    // If already an HTTP error, re-throw
-    if (error.statusCode) {
-      throw error
-    }
-
-    // Log unexpected errors
-    console.error('[Auth Middleware] Unexpected error:', error.message)
-
-    // Generic error (don't expose internal details)
-    throw createError({
-      statusCode: 401,
-      statusMessage: 'Authentication failed'
-    })
+    return await verify(hash, password)
+  } catch {
+    return false
   }
 }
 
-/**
- * Optional auth - doesn't throw if not authenticated
- * Returns user if authenticated, null if not
- */
-export async function optionalAuth(event: H3Event) {
+// ==================== JWT TOKENS ====================
+
+export interface TokenPayload {
+  userId: string
+  email: string
+  role: string
+  iat?: number
+  exp?: number
+}
+
+export function generateTokens(userId: string, email?: string, role: string = 'user') {
+  const accessToken = jwt.sign(
+    { userId, email, role },
+    JWT_SECRET,
+    { expiresIn: '15m' } // 15 minutes
+  )
+
+  const refreshToken = jwt.sign(
+    { userId },
+    JWT_REFRESH_SECRET,
+    { expiresIn: '7d' } // 7 days
+  )
+
+  return { accessToken, refreshToken }
+}
+
+export function jwtVerify(token: string): TokenPayload {
   try {
-    return await requireAuth(event)
+    const decoded = jwt.verify(token, JWT_SECRET) as TokenPayload
+    return decoded
+  } catch (error) {
+    throw new Error('Invalid or expired token')
+  }
+}
+
+export function jwtVerifyRefresh(token: string): { userId: string } {
+  try {
+    const decoded = jwt.verify(token, JWT_REFRESH_SECRET) as { userId: string }
+    return decoded
+  } catch (error) {
+    throw new Error('Invalid or expired refresh token')
+  }
+}
+
+export function jwtDecode(token: string): TokenPayload | null {
+  try {
+    return jwt.decode(token) as TokenPayload
   } catch {
     return null
   }
-}
-
-/**
- * Get current user from event context
- * Call this after requireAuth has set context.user
- */
-export function getCurrentUser(event: H3Event) {
-  return event.context.user || null
 }
